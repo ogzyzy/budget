@@ -3,6 +3,12 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.4.1
+- Ta sama nazwa kategorii może być u różnych osób (np. „Multisport” Dominika i Mileny); unikalność w obrębie
+  właściciela. Zmiana nazwy, usuwanie i kwota w jednym miesiącu działają tylko na wydatkach tego właściciela.
+- Bez mignięć przy szybkich operacjach: zapis uznawany za potwierdzony dopiero, gdy baza pokaże dokładnie
+  oczekiwany stan (wcześniej potwierdzenie poprzedniego zapisu mogło na chwilę przywrócić usunięty wpis).
+
 ## 1.4.0
 - Rozliczenia: wpisany dług nie zmienia niczyich środków; dopiero ✓ „oddane” odejmuje dłużnikowi i dodaje
   wierzycielowi (wcześniej wierzyciel miał mniej od razu).

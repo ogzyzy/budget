@@ -234,7 +234,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.4.0</p>
+    <p class="wersja">wersja 1.4.1</p>
   </section>
 
   <!-- DODAJ -->
@@ -520,7 +520,7 @@ function obliczStan(raw, m) {
   })();
 
   // --- samoaktualizacja: telefon potrafi trzymać starą stronę w pamięci; gdy na serwerze jest nowsza, przeładuj ---
-  var APP_V = "1.4.0";
+  var APP_V = "1.4.1";
   (function(){
     if (!window.fetch || location.protocol === "file:") return;
     fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
@@ -630,11 +630,30 @@ function obliczStan(raw, m) {
     });
   }
   function snapKey(v){ return JSON.stringify(v, freeze); }
-  function seen(c, v){ if (waiting[c] && snapKey(v) !== before[c]) waiting[c] = false; }
+  // Czekamy na DOKŁADNY stan, którego oczekujemy po naszych zapisach (dokument usunięty / ma te pola),
+  // a nie na „jakąkolwiek zmianę” – potwierdzenie wcześniejszego zapisu nie może przywrócić starego widoku.
+  var pend = {}; // tabela → { id → { del, d } } (ostatni oczekiwany stan dokumentu)
+  function norm(v){ return v && typeof v.toDate === "function" ? v.toDate() : Array.isArray(v) ? v.map(norm) : v; }
+  function sameField(a, b){ return snapKey(norm(a)) === snapKey(b); }
+  function satisfied(c, v){
+    var p = pend[c] || {};
+    return Object.keys(p).every(function(id){
+      var o = p[id], doc = c === "root" ? v : (v || []).filter(function(x){ return x.id === id; })[0];
+      if (c !== "root") doc = doc && doc.d;
+      if (o.del) return !doc;
+      return !!doc && Object.keys(o.d).every(function(k){ return sameField(doc[k], o.d[k]); });
+    });
+  }
+  function seen(c, v){ if (waiting[c] && satisfied(c, v)) { waiting[c] = false; pend[c] = {}; } }
   function expect(list){
-    list.forEach(function(o){ var c = o.p.length === 2 ? "root" : o.p[2];
-      if (!waiting[c]) { waiting[c] = true; before[c] = snapKey(c === "root" ? docs.root : docs[c]); } });
-    clearTimeout(expect.t); expect.t = setTimeout(function(){ waiting = {}; rebuild(); }, 4000); // bezpiecznik
+    list.forEach(function(o){
+      var c = o.p.length === 2 ? "root" : o.p[2], id = o.p.length === 2 ? "root" : o.p[3];
+      var p = pend[c] = pend[c] || {}, prev = p[id];
+      if (o.t === "del") p[id] = { del: true };
+      else p[id] = { del: false, d: Object.assign({}, prev && !prev.del && o.merge ? prev.d : {}, o.d) };
+      waiting[c] = true;
+    });
+    clearTimeout(expect.t); expect.t = setTimeout(function(){ waiting = {}; pend = {}; rebuild(); }, 4000); // bezpiecznik
   }
   function load(m){
     month = m;
@@ -716,6 +735,11 @@ function obliczStan(raw, m) {
   function kw(v){ var n = Number(String(v).replace(/\s|zł|zl|pln/gi, "").replace(",", ".")); if (!isFinite(n) || n <= 0) throw new Error("Kwota musi być większa od zera."); return Math.round(n * 100) / 100; }
   function dt(iso){ var p = String(iso || "").split("-"); if (p.length !== 3) return new Date(); return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]), 12, 0, 0); }
   function empty(rows){ for (var i = 0; i < rows.length; i++) if (rows[i].slice(0, 4).every(function(x){ return x === "" || x === null; })) return i; throw new Error("Tabela jest pełna – dodajcie wiersze w arkuszu."); }
+  // Kategoria = nazwa + właściciel („Wspólne” albo osoba). Ta sama nazwa może być u różnych właścicieli,
+  // bo wydatki wspólne i osobiste każdej osoby leżą w osobnych tabelach.
+  function ownerOf(r, i){ return String(r.sk[i][3] || "Wspólne"); }
+  function tableOf(r, czyje){ var k = [String(r.names[0]), String(r.names[1])].indexOf(String(czyje || "Wspólne")); return k < 0 ? { t: r.tx, poz: 1, opis: 3 } : { t: r.pers[k], poz: 3, opis: 1 }; }
+  function findPoz(r, nazwa, czyje){ for (var i = 0; i < r.sk.length; i++) if (String(r.sk[i][0]).trim() === nazwa && (czyje === undefined || ownerOf(r, i) === String(czyje))) return i; return -1; }
   var LOCAL = {
     dodajWydatek: function(r, d){ if (!String(d.pozycja || "").trim()) throw new Error("Wybierz kategorię."); r.tx[empty(r.tx)] = [dt(d.data), d.pozycja || "", kw(d.kwota), d.opis || ""]; },
     dodajOsobisty: function(r, d){ var t = r.pers[Number(d.osoba) === 1 ? 1 : 0]; t[empty(t)] = [dt(d.data), d.opis || "", kw(d.kwota), d.pozycja || ""]; },
@@ -733,8 +757,7 @@ function obliczStan(raw, m) {
       var t = r.pers[k]; t[empty(t)] = [dt(d.data), AKTUALIZACJA, roznica, ""];
     },
     ustawKwoteMiesiaca: function(r, d){
-      var nazwa = String(d.nazwa || "").trim(), m = Number(d.miesiac), poz = null;
-      for (var i = 0; i < r.sk.length; i++) if (String(r.sk[i][0]).trim() === nazwa) { poz = r.sk[i]; break; }
+      var nazwa = String(d.nazwa || "").trim(), m = Number(d.miesiac), pi = findPoz(r, nazwa, d.czyje), poz = pi < 0 ? null : r.sk[pi];
       if (!poz) throw new Error("Nie ma kategorii „" + nazwa + "”.");
       if (poz[4] !== "✓") throw new Error("Kategoria „" + nazwa + "” jest wyłączona.");
       var n = Number(String(d.kwota).replace(/\s|zł|zl|pln/gi, "").replace(",", "."));
@@ -760,7 +783,7 @@ function obliczStan(raw, m) {
         if (d.grupa !== undefined && d.grupa !== null) grupa = String(d.grupa).trim();
         else if (row >= 0) grupa = String(r.sk[row][1] || "").trim();
       }
-      for (var i = 0; i < names.length; i++) if (i !== row && names[i].toLowerCase() === nazwa.toLowerCase()) throw new Error("Kategoria „" + nazwa + "” już istnieje.");
+      for (var i = 0; i < names.length; i++) if (i !== row && names[i].toLowerCase() === nazwa.toLowerCase() && ownerOf(r, i) === String(czyje)) throw new Error("Kategoria „" + nazwa + "” już istnieje" + (czyje === "Wspólne" ? "." : " (" + czyje + ")."));
       var gr = r.groups.map(function(x){ return String(x).trim(); });
       if (grupa && gr.indexOf(grupa) < 0) {
         var wolna = gr.indexOf("");
@@ -772,20 +795,14 @@ function obliczStan(raw, m) {
         row = names.indexOf("");
         if (row < 0) throw new Error("Brak wolnych miejsc na kategorie (max 60).");
         r.plan[row] = r.plan[row].map(function(){ return ""; });
-      } else stara = names[row];
+      } else { stara = names[row]; var staryWl = ownerOf(r, row); }
       var kwv = (d.kwota === "" || d.kwota === null || d.kwota === undefined || Number(String(d.kwota).replace(",", ".")) === 0) ? "" : kw(d.kwota);
       r.sk[row] = [nazwa, grupa, kwv, czyje, d.aktywna === false ? "" : "✓"];
-      if (stara && stara !== nazwa) {
-        r.tx.forEach(function(x){ if (String(x[1]) === stara) x[1] = nazwa; });
-        r.pers.forEach(function(t){ t.forEach(function(x){ if (String(x[3]) === stara) x[3] = nazwa; }); });
-      }
+      if (stara && stara !== nazwa) { var tb = tableOf(r, staryWl); tb.t.forEach(function(x){ if (String(x[tb.poz]) === stara) x[tb.poz] = nazwa; }); }
     },
     usunPozycje: function(r, d){
       var row = Number(d.row), nazwa = String(r.sk[row][0]).trim();
-      if (nazwa) {
-        r.tx.forEach(function(x, j){ if (String(x[1]) === nazwa && String(x[3]) === KOREKTA) r.tx[j] = ["", "", "", ""]; });
-        r.pers.forEach(function(t){ t.forEach(function(x, j){ if (String(x[3]) === nazwa && String(x[1]) === KOREKTA) t[j] = ["", "", "", ""]; }); });
-      }
+      if (nazwa) { var tb = tableOf(r, ownerOf(r, row)); tb.t.forEach(function(x, j){ if (String(x[tb.poz]) === nazwa && String(x[tb.opis]) === KOREKTA) tb.t[j] = ["", "", "", ""]; }); }
       r.sk[row] = ["", "", "", "Wspólne", "✓"];
       r.plan[row] = r.plan[row].map(function(){ return ""; });
     }
@@ -797,10 +814,11 @@ function obliczStan(raw, m) {
     try { LOCAL[fn](next, arg); } catch(e){ toast(e.message, true); return Promise.resolve(false); }
     var prevIds = IDS; IDS = JSON.parse(JSON.stringify(IDS));
     var list; try { list = ops(RAW, next); } catch(e){ IDS = prevIds; throw e; }
+    if (window.BUDZET_TEST) window.BUDZET_TEST.lastOps = { fn: fn, ids: JSON.parse(JSON.stringify(prevIds)), ops: list.map(function(o){ return o.t + " " + o.p.slice(2).join("/"); }) };
     if (arg && arg.miesiac) month = Number(arg.miesiac);
     if (!list.length) { show_(month); if (ok) toast(ok); return Promise.resolve(true); }
     expect(list);
-    commit(list).catch(function(e){ waiting = {}; rebuild(); toast("Nie zapisano: " + ((e && e.message) || "błąd") + " – cofnięto.", true); });
+    commit(list).catch(function(e){ waiting = {}; pend = {}; rebuild(); toast("Nie zapisano: " + ((e && e.message) || "błąd") + " – cofnięto.", true); });
     if (typing()) document.activeElement.blur(); // zapis kończy pisanie – pokaż wynik od razu
     RAW = next; show_(month); // ekran od razu; potwierdzenie z bazy (onSnapshot) tylko go uzgodni
     if (ok) toast(ok);
@@ -1031,7 +1049,7 @@ function obliczStan(raw, m) {
     var name = $("posName").value.trim().replace(/\s+/g, " "); if (!name) return err("Wpisz nazwę kategorii.", "posName");
     var kw = posFixedV ? $("posFixed").value.trim() : "";
     if (posFixedV && !(Number(kw.replace(/\s|zł|zl|pln/gi, "").replace(",", ".")) > 0)) return err("Wpisz kwotę stałego kosztu, np. 79 albo 29,99.", "posFixed");
-    var dup = null; S.positions.forEach(function(p){ if ((!posEdit || p.row !== posEdit.row) && p.name.toLowerCase() === name.toLowerCase()) dup = p; });
+    var dup = null; S.positions.forEach(function(p){ if ((!posEdit || p.row !== posEdit.row) && p.name.toLowerCase() === name.toLowerCase() && (p.ownerOk ? p.owner : "Wspólne") === posOwnerV) dup = p; });
     if (dup && !posEdit && posFixedV && !(dup.fixed > 0)) {
       // kategoria już jest, ale bez kwoty (np. z szablonu) – zrób z niej koszt stały zamiast odmawiać
       closePos();
@@ -1110,7 +1128,7 @@ function obliczStan(raw, m) {
             var v = inp.value.trim(); var n = Number(v.replace(/\s|zł|zl|pln/gi, "").replace(",", "."));
             if (v === "" || !isFinite(n) || n < 0) { inp.value = String(p.month).replace(".", ","); toast("Wpisz kwotę.", true); return; }
             if (Math.abs(n - p.month) < 0.005) return;
-            call("ustawKwoteMiesiaca", {nazwa: p.name, kwota: n, miesiac: month}, Math.abs(n - p.fixed) < 0.005 ? "Przywrócono zwykłą kwotę" : "Zmieniono tylko w " + ["styczniu","lutym","marcu","kwietniu","maju","czerwcu","lipcu","sierpniu","wrześniu","październiku","listopadzie","grudniu"][month - 1]);
+            call("ustawKwoteMiesiaca", {nazwa: p.name, czyje: p.ownerOk ? p.owner : "Wspólne", kwota: n, miesiac: month}, Math.abs(n - p.fixed) < 0.005 ? "Przywrócono zwykłą kwotę" : "Zmieniono tylko w " + ["styczniu","lutym","marcu","kwietniu","maju","czerwcu","lipcu","sierpniu","wrześniu","październiku","listopadzie","grudniu"][month - 1]);
           };
           var ok = el("button", "fx-ok", "Zapisz"); ok.type = "button"; ok.hidden = true;
           var lock = false, go = function(){ if (lock) return; lock = true; ok.hidden = true; save(); setTimeout(function(){ lock = false; }, 400); };
