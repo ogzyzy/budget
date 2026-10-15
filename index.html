@@ -175,6 +175,7 @@ button,input,select{font:inherit;color:inherit}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.err{background:var(--over);color:#fff}
 .loading{opacity:.55;pointer-events:none}
+body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3px;z-index:60;background:linear-gradient(90deg,transparent,var(--shared),transparent);background-size:50% 100%;background-repeat:no-repeat;animation:odsw 1s linear infinite}@keyframes odsw{from{background-position:-50% 0}to{background-position:150% 0}}
 .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:flex-end;z-index:30}
 .sheet-bg.on{display:flex}
 .sheet{background:var(--surface);width:100%;border-radius:24px 24px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom))}
@@ -355,7 +356,18 @@ button,input,select{font:inherit;color:inherit}
       .then(function(j){ if (!j || !j.ok) throw new Error((j && j.error) || "Coś poszło nie tak."); return j.data; });
   }
   function toast(msg, err){ var t = $("toast"); t.textContent = msg; t.className = "toast on" + (err ? " err" : ""); clearTimeout(toast.t); toast.t = setTimeout(function(){ t.className = "toast"; }, 2200); }
-  function load(m){ document.body.classList.add("loading"); return api("pobierzStan", m).then(set).catch(fail); }
+  // Ostatni stan każdego miesiąca jest zapamiętany na telefonie: pokazujemy go od razu,
+  // a świeże dane z arkusza dociągamy w tle. gen chroni przed nadpisaniem wyniku nowszego zapisu starszym odczytem.
+  var gen = 0;
+  function cached(m){ try { var c = JSON.parse(store("budzet_stan_" + m) || "null"); return c && c.month === m ? c : null; } catch(e){ return null; } }
+  function remember(s){ try { store("budzet_stan_" + s.month, JSON.stringify(s)); } catch(e){} }
+  function load(m){
+    var g = ++gen, c = cached(m);
+    if (c) { set(c); document.body.classList.add("refreshing"); } else document.body.classList.add("loading");
+    return api("pobierzStan", m).then(function(s){ if (g !== gen) return; remember(s); document.body.classList.remove("refreshing"); set(s); })
+      .catch(function(e){ if (g !== gen) return; document.body.classList.remove("refreshing");
+        if (c) { busy = false; toast("Nie udało się odświeżyć – pokazuję ostatnie dane.", true); } else fail(e); });
+  }
   function set(s){ S = s; month = s.month; document.body.classList.remove("loading"); busy = false; render(); }
   function fail(e){ document.body.classList.remove("loading"); busy = false; var msg = (e && e.message) || "Coś poszło nie tak."; if (!S) { $("bladTxt").textContent = msg; $("blad").className = "blad on"; } else toast(msg, true); }
 
@@ -662,7 +674,7 @@ button,input,select{font:inherit;color:inherit}
     };
     return b;
   }
-  function call(fn, arg, ok){ if (busy) return Promise.resolve(); busy = true; document.body.classList.add("loading"); return api(fn, arg).then(function(s){ set(s); if (ok) toast(ok); return true; }).catch(function(e){ fail(e); return false; }); }
+  function call(fn, arg, ok){ if (busy) return Promise.resolve(); busy = true; document.body.classList.add("loading"); gen++; document.body.classList.remove("refreshing"); return api(fn, arg).then(function(s){ remember(s); set(s); if (ok) toast(ok); return true; }).catch(function(e){ fail(e); return false; }); }
   function remove(d){ d.miesiac = month; call("usunWpis", d, "Usunięto"); }
   function today(){ var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
   function amount(){ var v = $("amt").value.replace(/\s/g, "").replace(",", "."); var n = Number(v); return isFinite(n) && n > 0 ? n : 0; }
