@@ -175,6 +175,7 @@ button,input,select{font:inherit;color:inherit}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.err{background:var(--over);color:#fff}
 .loading{opacity:.55;pointer-events:none}
+.toast{width:max-content;max-width:calc(100vw - 32px);white-space:normal;text-align:center;box-sizing:border-box;border-radius:18px}
 body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3px;z-index:60;background:linear-gradient(90deg,transparent,var(--shared),transparent);background-size:50% 100%;background-repeat:no-repeat;animation:odsw 1s linear infinite}@keyframes odsw{from{background-position:-50% 0}to{background-position:150% 0}}
 .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:flex-end;z-index:30}
 .sheet-bg.on{display:flex}
@@ -548,8 +549,74 @@ function obliczStan(raw, m) {
     zapiszWyplaty: function(r, d){ var v = function(x){ return (x === "" || x === null || x === undefined) ? "" : kw(x); }; var p = r.pay[Number(d.miesiac) - 1]; p[0] = v(d.c); p[1] = v(d.d); p[2] = v(d.e); },
     ustawPrzelew: function(r, d){ r.pay[Number(d.miesiac) - 1][Number(d.osoba) === 1 ? 4 : 3] = d.wszedl ? "✓" : ""; },
     dodajRozliczenie: function(r, d){ var k = kw(d.kwota), b = Number(d.kierunek) === 1; r.rz[empty(r.rz)] = [b ? "" : k, b ? k : "", "", d.opis || ""]; },
-    ustawOddane: function(r, d){ if (r.rz[Number(d.row)]) r.rz[Number(d.row)][2] = d.oddane ? "✓" : ""; }
+    ustawOddane: function(r, d){ if (r.rz[Number(d.row)]) r.rz[Number(d.row)][2] = d.oddane ? "✓" : ""; },
+    aktualizujStan: function(r, d){
+      var k = Number(d.osoba) === 1 ? 1 : 0, m = Number(d.miesiac);
+      var n = Number(String(d.stan).replace(/\s/g, "").replace(",", "."));
+      if (String(d.stan).trim() === "" || !isFinite(n)) throw new Error("Wpisz, ile masz.");
+      var roznica = Math.round((obliczStan(r, m).persons[k].masz - n) * 100) / 100;
+      if (roznica === 0) throw new Error("Stan się zgadza – nic nie zapisano.");
+      var t = r.pers[k]; t[empty(t)] = [dt(d.data), AKTUALIZACJA, roznica, ""];
+    },
+    ustawKwoteMiesiaca: function(r, d){
+      var nazwa = String(d.nazwa || "").trim(), m = Number(d.miesiac), poz = null;
+      for (var i = 0; i < r.sk.length; i++) if (String(r.sk[i][0]).trim() === nazwa) { poz = r.sk[i]; break; }
+      if (!poz) throw new Error("Nie ma kategorii „" + nazwa + "”.");
+      if (poz[4] !== "✓") throw new Error("Kategoria „" + nazwa + "” jest wyłączona.");
+      var n = Number(String(d.kwota).replace(/\s/g, "").replace(",", "."));
+      if (!isFinite(n) || n < 0) throw new Error("Wpisz kwotę.");
+      var roznica = Math.round((n - (Number(poz[2]) || 0)) * 100) / 100;
+      var rok = Number(r.year) || new Date().getFullYear();
+      var k = [String(r.names[0]), String(r.names[1])].indexOf(String(poz[3] || "Wspólne"));
+      var t = k < 0 ? r.tx : r.pers[k], kolPoz = k < 0 ? 1 : 3, kolOpis = k < 0 ? 3 : 1;
+      for (var j = 0; j < t.length; j++) {
+        var x = t[j][0];
+        if (String(t[j][kolPoz]) === nazwa && String(t[j][kolOpis]) === KOREKTA && x instanceof Date && x.getFullYear() === rok && x.getMonth() + 1 === m) t[j] = ["", "", "", ""];
+      }
+      if (roznica !== 0) { var w = empty(t), dd = new Date(rok, m - 1, 1, 12); t[w] = k < 0 ? [dd, nazwa, roznica, KOREKTA] : [dd, KOREKTA, roznica, nazwa]; }
+    },
+    zapiszPozycje: function(r, d){
+      var nazwa = String(d.nazwa || "").trim();
+      if (!nazwa) throw new Error("Wpisz nazwę kategorii.");
+      var czyje = d.czyje || "Wspólne";
+      var names = r.sk.map(function(x){ return String(x[0]).trim(); });
+      var row = (d.row === null || d.row === undefined || d.row === "") ? -1 : Number(d.row);
+      var grupa = "";
+      if (czyje === "Wspólne") {
+        if (d.grupa !== undefined && d.grupa !== null) grupa = String(d.grupa).trim();
+        else if (row >= 0) grupa = String(r.sk[row][1] || "").trim();
+      }
+      for (var i = 0; i < names.length; i++) if (i !== row && names[i].toLowerCase() === nazwa.toLowerCase()) throw new Error("Kategoria „" + nazwa + "” już istnieje.");
+      var gr = r.groups.map(function(x){ return String(x).trim(); });
+      if (grupa && gr.indexOf(grupa) < 0) {
+        var wolna = gr.indexOf("");
+        if (wolna < 0) throw new Error("Brak miejsca na nową grupę (max 12). Wybierz istniejącą.");
+        r.groups[wolna] = grupa;
+      }
+      var stara = "";
+      if (row < 0) {
+        row = names.indexOf("");
+        if (row < 0) throw new Error("Brak wolnych miejsc na kategorie (max 60).");
+        r.plan[row] = r.plan[row].map(function(){ return ""; });
+      } else stara = names[row];
+      var kwv = (d.kwota === "" || d.kwota === null || d.kwota === undefined || Number(String(d.kwota).replace(",", ".")) === 0) ? "" : kw(d.kwota);
+      r.sk[row] = [nazwa, grupa, kwv, czyje, d.aktywna === false ? "" : "✓"];
+      if (stara && stara !== nazwa) {
+        r.tx.forEach(function(x){ if (String(x[1]) === stara) x[1] = nazwa; });
+        r.pers.forEach(function(t){ t.forEach(function(x){ if (String(x[3]) === stara) x[3] = nazwa; }); });
+      }
+    },
+    usunPozycje: function(r, d){
+      var row = Number(d.row), nazwa = String(r.sk[row][0]).trim();
+      if (nazwa) {
+        r.tx.forEach(function(x, j){ if (String(x[1]) === nazwa && String(x[3]) === KOREKTA) r.tx[j] = ["", "", "", ""]; });
+        r.pers.forEach(function(t){ t.forEach(function(x, j){ if (String(x[3]) === nazwa && String(x[1]) === KOREKTA) t[j] = ["", "", "", ""]; }); });
+      }
+      r.sk[row] = ["", "", "", "Wspólne", "✓"];
+      r.plan[row] = r.plan[row].map(function(){ return ""; });
+    }
   };
+  window.BUDZET_TEST = { LOCAL: LOCAL }; // do testów zgodności z serwerem
   function call(fn, arg, ok){
     var m = arg && arg.miesiac ? Number(arg.miesiac) : month;
     if (RAW && LOCAL[fn]) {
@@ -873,6 +940,7 @@ function obliczStan(raw, m) {
     };
     return b;
   }
+  window.BUDZET_TEST.call = call; window.BUDZET_TEST.raw = function(){ return RAW; }; window.BUDZET_TEST.pending = function(){ return pending; };
   function remove(d){ d.miesiac = month; call("usunWpis", d, "Usunięto"); }
   function today(){ var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
   function amount(){ var v = $("amt").value.replace(/\s/g, "").replace(",", "."); var n = Number(v); return isFinite(n) && n > 0 ? n : 0; }
