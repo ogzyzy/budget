@@ -228,7 +228,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.4.0</p>
+    <p class="wersja">wersja 1.0.4</p>
   </section>
 
   <!-- DODAJ -->
@@ -497,7 +497,7 @@ function obliczStan(raw, m) {
   var me = (function(){ var v = store("budzet_ja"); return v === "0" || v === "1" ? Number(v) : null; })();
 
   // --- samoaktualizacja: telefon potrafi trzymać starą stronę w pamięci; gdy na serwerze jest nowsza, przeładuj ---
-  var APP_V = "1.4.0";
+  var APP_V = "1.0.4";
   (function(){
     if (!window.fetch || location.protocol === "file:") return;
     fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
