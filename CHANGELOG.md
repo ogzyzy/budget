@@ -3,6 +3,15 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.3.0
+- Obsługa błędów: komunikaty zawsze na wierzchu (wcześniej chowały się pod oknami), błędy widoczne 6 s i zamykane
+  stuknięciem, błąd w oknie kategorii pod polem, wyłapywanie nieoczekiwanych błędów, pasek „Brak internetu”.
+- Koszt stały o nazwie istniejącej kategorii bez kwoty (np. „Internet” z szablonu) zamienia ją w koszt stały
+  zamiast odmawiać.
+- Zapamiętywanie użytkownika („kim jesteś”): pamięć przeglądarki + ciasteczko + adres (?ja=) – ikona na ekranie
+  startowym dodana po wyborze pamięta osobę na stałe.
+- Wielokrotne spacje w nazwie kategorii są skracane do jednej.
+
 ## 1.2.1
 - Pisanie nie jest przerywane przez zmiany przychodzące z bazy (np. od drugiej osoby): ekran odświeża się po wyjściu z pola.
 - Ekran nie przerysowuje się, gdy baza tylko potwierdza zapis.

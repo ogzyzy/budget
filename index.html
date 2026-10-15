@@ -175,8 +175,13 @@ button,input,select{font:inherit;color:inherit}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.err{background:var(--over);color:#fff}
 .loading{opacity:.55;pointer-events:none}
+.toast.err{pointer-events:auto}
+.form-err{color:var(--over);font-size:14px;margin:-4px 0 10px;min-height:0}
+.form-err:empty{display:none}
+.offline{position:fixed;top:calc(6px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:65;background:var(--settle-soft);color:var(--ink);font-size:13px;padding:6px 12px;border-radius:999px;display:none}
+.offline.on{display:block}
 .wersja{text-align:center;color:var(--muted);font-size:12px;margin:24px 0 8px}
-.toast{width:max-content;max-width:calc(100vw - 32px);white-space:normal;text-align:center;box-sizing:border-box;border-radius:18px}
+.toast{z-index:70!important;width:max-content;max-width:calc(100vw - 32px);white-space:normal;text-align:center;box-sizing:border-box;border-radius:18px}
 body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3px;z-index:60;background:linear-gradient(90deg,transparent,var(--shared),transparent);background-size:50% 100%;background-repeat:no-repeat;animation:odsw 1s linear infinite}@keyframes odsw{from{background-position:-50% 0}to{background-position:150% 0}}
 .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:flex-end;z-index:30}
 .sheet-bg.on{display:flex}
@@ -228,7 +233,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.2.1</p>
+    <p class="wersja">wersja 1.3.0</p>
   </section>
 
   <!-- DODAJ -->
@@ -309,10 +314,12 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
 </nav>
 
 <div class="blad" id="blad"><div><b>Nie udało się wczytać budżetu</b><p id="bladTxt"></p><button type="button" onclick="location.reload()">Spróbuj ponownie</button></div></div>
+<div class="offline" id="offline">Brak internetu – zapisy wyślą się później</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="sheet-bg" id="posSheet"><div class="sheet" role="dialog" aria-labelledby="posTitle">
   <h3 id="posTitle">Nowa kategoria</h3>
   <label class="field"><span>Nazwa</span><input id="posName" type="text" lang="pl" autocomplete="off" autocapitalize="sentences" autocorrect="off" spellcheck="false" enterkeyhint="done" placeholder="np. Czynsz, Netflix, Biedronka"></label>
+  <p class="form-err" id="posErr" role="alert"></p>
   <div class="field" id="posOwnerField"><span>Czyja</span><div class="chips" id="posOwner"></div></div>
   <button type="button" class="tick" id="posFixedTick" style="background:var(--surface2)"></button>
   <label class="field" id="posFixedField"><span>Kwota co miesiąc</span><input id="posFixed" class="num" inputmode="decimal" placeholder="np. 99"></label>
@@ -497,10 +504,21 @@ function obliczStan(raw, m) {
   function zl(v, dec){ v = Number(v) || 0; var f = (dec && Math.round(v) !== v) ? fmt2 : fmt0; return (v < 0 ? "−" : "") + f.format(Math.abs(v)) + " zł"; }
   function el(tag, cls, text){ var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
   function store(k, v){ try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch(e){ return null; } }
-  var me = (function(){ var v = store("budzet_ja"); return v === "0" || v === "1" ? Number(v) : null; })();
+  // kim jestem: adres (?ja=, trafia do ikony na ekranie startowym) → pamięć przeglądarki → ciasteczko
+  function cookie(k, v){ try { if (v === undefined) { var m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)")); return m ? decodeURIComponent(m[1]) : null; }
+    document.cookie = k + "=" + encodeURIComponent(v) + "; max-age=" + 60 * 60 * 24 * 400 + "; path=/; SameSite=Lax; Secure"; } catch(e){ return null; } }
+  function rememberMe(k){
+    store("budzet_ja", String(k)); cookie("budzet_ja", String(k));
+    try { var u = new URL(location.href); u.searchParams.set("ja", String(k)); u.searchParams.delete("_v"); history.replaceState(null, "", u.pathname + u.search + u.hash); } catch(e){}
+  }
+  var me = (function(){
+    var m = location.search.match(/[?&]ja=([01])\b/), v = m ? m[1] : (store("budzet_ja") || cookie("budzet_ja"));
+    if (v !== "0" && v !== "1") return null;
+    rememberMe(v); return Number(v);
+  })();
 
   // --- samoaktualizacja: telefon potrafi trzymać starą stronę w pamięci; gdy na serwerze jest nowsza, przeładuj ---
-  var APP_V = "1.2.1";
+  var APP_V = "1.3.0";
   (function(){
     if (!window.fetch || location.protocol === "file:") return;
     fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
@@ -528,7 +546,15 @@ function obliczStan(raw, m) {
             function(){ throw new Error("Brak internetu albo serwer nie odpowiada (30 s)."); })
       .then(function(j){ if (!j || !j.ok) throw new Error((j && j.error) || "Coś poszło nie tak."); return j.data; });
   }
-  function toast(msg, err){ var t = $("toast"); t.textContent = msg; t.className = "toast on" + (err ? " err" : ""); clearTimeout(toast.t); toast.t = setTimeout(function(){ t.className = "toast"; }, 2200); }
+  function toast(msg, err){ var t = $("toast"); t.textContent = msg; t.className = "toast on" + (err ? " err" : ""); clearTimeout(toast.t); toast.t = setTimeout(function(){ t.className = "toast"; }, err ? 6000 : 2200); }
+  $("toast").onclick = function(){ clearTimeout(toast.t); this.className = "toast"; };
+  // nieoczekiwane błędy: pokaż zamiast cichej awarii
+  window.addEventListener("error", function(e){ toast("Błąd aplikacji: " + ((e && e.message) || "nieznany") + ". Odśwież aplikację.", true); });
+  window.addEventListener("unhandledrejection", function(e){ var m = e && e.reason && (e.reason.message || e.reason); toast("Błąd: " + (m || "nieznany"), true); });
+  // brak internetu: zapisy czekają w telefonie i wyślą się same
+  function netInfo(){ var o = $("offline"); if (o) o.className = "offline" + (navigator.onLine === false ? " on" : ""); }
+  window.addEventListener("online", function(){ netInfo(); toast("Jest internet – wysyłam zapisy."); });
+  window.addEventListener("offline", netInfo);
   // --- dane: baza Firestore, ścieżka budzety/{KEY} (tajny klucz z linku) ---
   // Firestore trzyma kopię na telefonie (działa też bez internetu): zapis widać od razu,
   // do bazy idzie w tle, a zmiany drugiej osoby przychodzą na żywo (onSnapshot).
@@ -961,7 +987,7 @@ function obliczStan(raw, m) {
     posEdit = p; posAfter = after; posFixedOnly = !!fixedOnly;
     $("posOwnerField").hidden = !!lockOwner;
     $("posTitle").textContent = fixedOnly ? (p ? "Zmień koszt stały" : "Nowy koszt stały") : p ? "Zmień kategorię" : lockOwner ? (owner === "Wspólne" ? "Nowa kategoria wspólna" : "Nowa kategoria: " + owner) : "Nowa kategoria";
-    $("posName").value = p ? p.name : "";
+    $("posName").value = p ? p.name : ""; $("posErr").textContent = "";
     posOwnerV = p ? (p.ownerOk ? p.owner : "Wspólne") : (owner || "Wspólne");
     posActiveV = p ? p.active : true;
     $("posFixed").value = p && p.fixed ? p.fixed : "";
@@ -984,12 +1010,21 @@ function obliczStan(raw, m) {
   $("posActive").onclick = function(){ posActiveV = !posActiveV; drawPosForm(); };
   $("posCancel").onclick = closePos;
   $("posSheet").onclick = function(e){ if (e.target === $("posSheet")) closePos(); };
+  $("posName").addEventListener("input", function(){ $("posErr").textContent = ""; });
+  $("posFixed").addEventListener("input", function(){ $("posErr").textContent = ""; });
   $("posSave").onclick = function(){
-    var name = $("posName").value.trim(); if (!name) { toast("Wpisz nazwę kategorii.", true); $("posName").focus(); return; }
+    var err = function(msg, field){ $("posErr").textContent = msg; if (field) $(field).focus(); };
+    var name = $("posName").value.trim().replace(/\s+/g, " "); if (!name) return err("Wpisz nazwę kategorii.", "posName");
     var kw = posFixedV ? $("posFixed").value.trim() : "";
-    if (posFixedV && !(Number(kw.replace(/\s|zł|zl|pln/gi, "").replace(",", ".")) > 0)) { toast("Wpisz kwotę stałego kosztu.", true); $("posFixed").focus(); return; }
-    var dup = S.positions.some(function(p){ return (!posEdit || p.row !== posEdit.row) && p.name.toLowerCase() === name.toLowerCase(); });
-    if (dup) { toast("Kategoria „" + name + "” już istnieje.", true); $("posName").focus(); return; }
+    if (posFixedV && !(Number(kw.replace(/\s|zł|zl|pln/gi, "").replace(",", ".")) > 0)) return err("Wpisz kwotę stałego kosztu, np. 79 albo 29,99.", "posFixed");
+    var dup = null; S.positions.forEach(function(p){ if ((!posEdit || p.row !== posEdit.row) && p.name.toLowerCase() === name.toLowerCase()) dup = p; });
+    if (dup && !posEdit && posFixedV && !(dup.fixed > 0)) {
+      // kategoria już jest, ale bez kwoty (np. z szablonu) – zrób z niej koszt stały zamiast odmawiać
+      closePos();
+      call("zapiszPozycje", { row: dup.row, nazwa: dup.name, kwota: kw, czyje: posOwnerV, aktywna: true, miesiac: month }, "„" + dup.name + "” już była kategorią – teraz to koszt stały");
+      return;
+    }
+    if (dup) return err("„" + dup.name + "” już istnieje" + (dup.fixed > 0 ? " jako koszt stały (" + zl(dup.fixed, true) + ") – stuknij go na liście, żeby zmienić." : (dup.owner !== "Wspólne" ? " (" + dup.owner + ")." : ".")), "posName");
     var after = posAfter, isNew = !posEdit;
     closePos();
     call("zapiszPozycje", {row: posEdit ? posEdit.row : null, nazwa: name, kwota: kw, czyje: posOwnerV, aktywna: posActiveV, miesiac: month}, isNew ? "Dodano kategorię" : "Zapisano kategorię").then(function(){
@@ -1155,13 +1190,14 @@ function obliczStan(raw, m) {
     var box = $("whoPick"); box.textContent = "";
     (S ? S.names : ["Osoba 1", "Osoba 2"]).forEach(function(n, k){
       var b = el("button"); b.appendChild(el("span", "dot " + (k ? "d2" : "d1"))); b.appendChild(document.createTextNode(n));
-      b.onclick = function(){ me = k; mineWho = k; mineView = k; store("budzet_ja", String(k)); $("whoSheet").classList.remove("on"); render(); };
+      b.onclick = function(){ me = k; mineWho = k; mineView = k; rememberMe(k); $("whoSheet").classList.remove("on"); render(); };
       box.appendChild(b);
     });
     $("whoSheet").classList.add("on");
   }
   $("whoBtn").onclick = askWho;
 
+  netInfo();
   if (me !== null) mineWho = me;
   load(month).then(function(){ if (me === null) askWho(); });
 })();
