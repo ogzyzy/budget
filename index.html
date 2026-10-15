@@ -234,7 +234,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.4.2</p>
+    <p class="wersja">wersja 1.5.0</p>
   </section>
 
   <!-- DODAJ -->
@@ -439,6 +439,16 @@ function obliczStan(raw, m) {
     return { name: x.name, spent: spent(x.name, m) + (act(m) ? x.fixed : 0), fixed: x.fixed };
   });
   var spentAll = itemsAll.reduce(function (s, x) { return s + x.spent; }, 0);
+  // na ekran Start: wspólne koszty stałe miesiąca (z korektami tylko na ten miesiąc) i osobno to, co dodane ręcznie
+  var staleWsp = act(m) ? shared.reduce(function (s, x) { return s + x.fixed; }, 0) : 0;
+  var zmienneMap = {};
+  tx.forEach(function (t) {
+    if (t.m !== m) return;
+    if (t.desc === KOREKTA) { staleWsp += t.amount; return; }
+    var k = t.pos || "bez kategorii"; zmienneMap[k] = (zmienneMap[k] || 0) + t.amount;
+  });
+  var zmienne = Object.keys(zmienneMap).map(function (k) { return { name: k, spent: zmienneMap[k] }; })
+    .filter(function (x) { return Math.abs(x.spent) >= 0.005; }).sort(function (a, b) { return b.spent - a.spent; });
   var planT = groupsOut.reduce(function (s, g) { return s + g.plan; }, 0);
   var spentT = groupsOut.reduce(function (s, g) { return s + g.spent; }, 0);
 
@@ -482,7 +492,7 @@ function obliczStan(raw, m) {
     month: m, monthName: MIESIACE[m - 1], months: MIESIACE, year: year, names: [n1, n2],
     shared: { budget: budget(m), plan: planT, spent: spentT, leftPlan: planT - spentT, free: budget(m) - planT, stan: stan,
               agreed: num_(pay[m - 1].e), ticks: [pay[m - 1].t1, pay[m - 1].t2], groups: groupsOut,
-              items: itemsAll, spentAll: spentAll },
+              items: itemsAll, spentAll: spentAll, staleMiesiac: staleWsp, zmienne: zmienne },
     persons: persons,
     settle: { owe: owe, net: net, dirs: dirs, text: Math.abs(net) < 0.005 ? "Jesteście kwita" : (net > 0 ? dirs[0] : dirs[1]), amount: Math.abs(net), list: rz.slice().reverse() },
     pay: { c: blank_(pay[m - 1].c) ? "" : num_(pay[m - 1].c), d: blank_(pay[m - 1].d) ? "" : num_(pay[m - 1].d), e: blank_(pay[m - 1].e) ? "" : num_(pay[m - 1].e), t1: pay[m - 1].t1, t2: pay[m - 1].t2 },
@@ -521,7 +531,7 @@ function obliczStan(raw, m) {
 
   // --- samoaktualizacja: telefon trzyma aplikację w tle i wznawia starą wersję bez przeładowania,
   // więc sprawdzamy przy starcie i przy każdym powrocie do aplikacji (najwyżej raz na 10 s) ---
-  var APP_V = "1.4.2";
+  var APP_V = "1.5.0";
   function checkUpdate(){
     if (!window.fetch || location.protocol === "file:") return;
     if (checkUpdate.last && Date.now() - checkUpdate.last < 10000) return;
@@ -586,6 +596,8 @@ function obliczStan(raw, m) {
   function show_(m){ set(obliczStan(RAW, m)); }
   function setRefreshing(on){ document.body.classList.toggle("refreshing", !!on); }
   function val(v){ return v === undefined || v === null ? "" : (typeof v.toDate === "function" ? v.toDate() : v); }
+  // data wpisu: Timestamp z bazy, Date albo (na wszelki wypadek) tekst ISO „2026-10-03…” – zawsze jako Date
+  function dateVal(v){ v = val(v); if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v)) { var d = new Date(v); return isNaN(d) ? "" : d; } return v; }
   function idOf(x){ return x.id; }
   function byT(a, b){ return (a.d.t || 0) - (b.d.t || 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); }
   function pad(rows, n, blank){ for (var i = 0; i < ZAPAS; i++) rows.push(blank()); return rows; }
@@ -602,11 +614,11 @@ function obliczStan(raw, m) {
     var raw = { startM: startM || 1, names: [val((r.names || [])[0]), val((r.names || [])[1])], year: val(r.year), start: val(r.start), groups: groups,
       sk: poz.map(function(x){ return [val(x.d.nazwa), val(x.d.grupa), val(x.d.kwota), val(x.d.czyje) || "Wspólne", val(x.d.aktywna)]; }),
       plan: poz.map(function(x){ var p = (x.d.plan || []).slice(0, 12).map(val); while (p.length < 12) p.push(""); return p; }),
-      tx: tx.map(function(x){ return [val(x.d.data), val(x.d.pozycja), val(x.d.kwota), val(x.d.opis)]; }),
+      tx: tx.map(function(x){ return [dateVal(x.d.data), val(x.d.pozycja), val(x.d.kwota), val(x.d.opis)]; }),
       pay: [], pers: [[], []], rz: rz.map(function(x){ return [val(x.d.a), val(x.d.b), val(x.d.oddane), val(x.d.opis)]; }) };
     for (var m = 1; m <= 12; m++) { var w = wyp[String(m)] || {}; raw.pay.push([val(w.c), val(w.d), val(w.e), val(w.t1), val(w.t2)]); }
     var ids = { sk: poz.map(idOf), tx: tx.map(idOf), pers: [[], []], rz: rz.map(idOf) };
-    os.forEach(function(x){ var k = Number(x.d.osoba) === 1 ? 1 : 0; raw.pers[k].push([val(x.d.data), val(x.d.opis), val(x.d.kwota), val(x.d.pozycja)]); ids.pers[k].push(x.id); });
+    os.forEach(function(x){ var k = Number(x.d.osoba) === 1 ? 1 : 0; raw.pers[k].push([dateVal(x.d.data), val(x.d.opis), val(x.d.kwota), val(x.d.pozycja)]); ids.pers[k].push(x.id); });
     pad(raw.sk, ZAPAS, function(){ return ["", "", "", "Wspólne", "✓"]; }); pad(raw.plan, ZAPAS, function(){ return ["", "", "", "", "", "", "", "", "", "", "", ""]; });
     pad(raw.tx, ZAPAS, blank4); pad(raw.pers[0], ZAPAS, blank4); pad(raw.pers[1], ZAPAS, blank4); pad(raw.rz, ZAPAS, blank4);
     IDS = ids; return raw;
@@ -734,8 +746,8 @@ function obliczStan(raw, m) {
         if (!first) return;
         var list = [], base = ["budzety", KEY], t0 = Date.now();
         r.sk.forEach(function(x, i){ if (String(x[0]).trim()) list.push({ p: base.concat(["pozycje", "p" + i]), d: { nazwa: x[0], grupa: x[1], kwota: x[2], czyje: x[3] || "Wspólne", aktywna: x[4], plan: r.plan[i], kol: i } }); });
-        r.tx.forEach(function(x, i){ if (!isBlank4(x)) list.push({ p: base.concat(["tx", "t" + i]), d: { data: x[0], pozycja: x[1], kwota: x[2], opis: x[3], t: t0 + i } }); });
-        [0, 1].forEach(function(k){ r.pers[k].forEach(function(x, i){ if (!isBlank4(x)) list.push({ p: base.concat(["osobiste", "o" + k + "_" + i]), d: { osoba: k, data: x[0], opis: x[1], kwota: x[2], pozycja: x[3], t: t0 + i } }); }); });
+        r.tx.forEach(function(x, i){ if (!isBlank4(x)) list.push({ p: base.concat(["tx", "t" + i]), d: { data: dateVal(x[0]), pozycja: x[1], kwota: x[2], opis: x[3], t: t0 + i } }); });
+        [0, 1].forEach(function(k){ r.pers[k].forEach(function(x, i){ if (!isBlank4(x)) list.push({ p: base.concat(["osobiste", "o" + k + "_" + i]), d: { osoba: k, data: dateVal(x[0]), opis: x[1], kwota: x[2], pozycja: x[3], t: t0 + i } }); }); });
         r.rz.forEach(function(x, i){ if (!isBlank4(x)) list.push({ p: base.concat(["rozliczenia", "r" + i]), d: { a: x[0], b: x[1], oddane: x[2], opis: x[3], t: t0 + i } }); });
         r.pay.forEach(function(x, i){ list.push({ p: base.concat(["wyplaty", String(i + 1)]), d: { c: x[0], d: x[1], e: x[2], t1: x[3], t2: x[4] } }); });
         return commit(list);
@@ -883,9 +895,8 @@ function obliczStan(raw, m) {
     var c = $("sharedCard"); c.textContent = "";
     c.appendChild(el("h2", "", "Wspólne konto"));
     c.appendChild(el("div", "big " + (S.shared.stan < 0 ? "neg" : ""), zl(S.shared.stan)));
-    var w = el("div"); w.style.marginTop = "12px"; w.appendChild(row("Wydane w tym miesiącu", S.shared.spentAll)); c.appendChild(w);
-    var items = S.shared.items.filter(function(x){ return x.spent > 0; }).sort(function(a, b){ return b.spent - a.spent; });
-    if (items.length) { var bx = el("div"); bx.id = "sharedByPos"; bars(bx, items.map(function(x){ return {k: x.name, v: x.spent}; }), null); c.appendChild(bx); }
+    var w = el("div"); w.style.marginTop = "12px"; w.appendChild(row("Koszty stałe", S.shared.staleMiesiac)); c.appendChild(w);
+    if (S.shared.zmienne.length) { var bx = el("div"); bx.id = "sharedByPos"; bars(bx, S.shared.zmienne.map(function(x){ return {k: x.name, v: x.spent}; }), null); c.appendChild(bx); }
     if (S.recent.tx.length) {
       c.appendChild(el("h2", "", "Historia")).style.margin = "16px 0 4px";
       var hl = el("div"); hl.id = "sharedList";
