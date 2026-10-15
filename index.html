@@ -233,7 +233,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.3.0</p>
+    <p class="wersja">wersja 1.3.1</p>
   </section>
 
   <!-- DODAJ -->
@@ -518,7 +518,7 @@ function obliczStan(raw, m) {
   })();
 
   // --- samoaktualizacja: telefon potrafi trzymać starą stronę w pamięci; gdy na serwerze jest nowsza, przeładuj ---
-  var APP_V = "1.3.0";
+  var APP_V = "1.3.1";
   (function(){
     if (!window.fetch || location.protocol === "file:") return;
     fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
@@ -658,9 +658,9 @@ function obliczStan(raw, m) {
     var col = function(name, oldRows, newRows, ids, blankFn, fields, extra){
       for (var i = 0; i < newRows.length; i++) {
         var id = ids[i], o = oldRows[i], n = newRows[i];
-        if (id && blankFn(n)) out.push({ t: "del", p: base.concat([name, id]) });
+        if (id && blankFn(n)) { out.push({ t: "del", p: base.concat([name, id]) }); ids[i] = undefined; } // zwolnij: nowy wpis w tym miejscu = nowy dokument
         else if (id && !same(o, n)) out.push({ t: "set", p: base.concat([name, id]), d: fields(n, i), merge: true });
-        else if (!id && !blankFn(n)) { var d = fields(n, i); d.t = tnow(); if (extra) extra(d, i); out.push({ t: "set", p: base.concat([name, nid()]), d: d }); }
+        else if (!id && !blankFn(n)) { var d = fields(n, i); d.t = tnow(); if (extra) extra(d, i); var nowy = nid(); ids[i] = nowy; out.push({ t: "set", p: base.concat([name, nowy]), d: d }); }
       }
     };
     col("tx", prev.tx, next.tx, IDS.tx, isBlank4, function(r){ return { data: r[0], pozycja: r[1], kwota: r[2], opis: r[3] }; });
@@ -793,7 +793,8 @@ function obliczStan(raw, m) {
     if (!RAW || !LOCAL[fn]) return Promise.resolve(false);
     var next = copyRaw(RAW);
     try { LOCAL[fn](next, arg); } catch(e){ toast(e.message, true); return Promise.resolve(false); }
-    var list = ops(RAW, next);
+    var prevIds = IDS; IDS = JSON.parse(JSON.stringify(IDS));
+    var list; try { list = ops(RAW, next); } catch(e){ IDS = prevIds; throw e; }
     if (arg && arg.miesiac) month = Number(arg.miesiac);
     if (!list.length) { show_(month); if (ok) toast(ok); return Promise.resolve(true); }
     expect(list);
@@ -1022,6 +1023,14 @@ function obliczStan(raw, m) {
       // kategoria już jest, ale bez kwoty (np. z szablonu) – zrób z niej koszt stały zamiast odmawiać
       closePos();
       call("zapiszPozycje", { row: dup.row, nazwa: dup.name, kwota: kw, czyje: posOwnerV, aktywna: true, miesiac: month }, "„" + dup.name + "” już była kategorią – teraz to koszt stały");
+      return;
+    }
+    if (dup && posEdit && posFixedV && !(dup.fixed > 0)) {
+      // zmiana nazwy kosztu stałego na nazwę pustej kategorii (np. z szablonu): połącz – pusta znika,
+      // ten koszt dostaje nową nazwę, a wydatki z obu nazw liczą się razem
+      closePos();
+      call("usunPozycje", { row: dup.row, miesiac: month });
+      call("zapiszPozycje", { row: posEdit.row, nazwa: name, kwota: kw, czyje: posOwnerV, aktywna: posActiveV, miesiac: month }, "Zapisano – połączono z pustą kategorią „" + dup.name + "”");
       return;
     }
     if (dup) return err("„" + dup.name + "” już istnieje" + (dup.fixed > 0 ? " jako koszt stały (" + zl(dup.fixed, true) + ") – stuknij go na liście, żeby zmienić." : (dup.owner !== "Wspólne" ? " (" + dup.owner + ")." : ".")), "posName");

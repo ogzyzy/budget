@@ -3,6 +3,12 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.3.1
+- Naprawa: kilka zapisów szybko po sobie (przed potwierdzeniem bazy) tworzyło duplikaty – nowe wpisy dostają
+  identyfikator od razu, a usunięte go zwalniają. (W danych budżetu duplikatów nie było – sprawdzone.)
+- Zmiana nazwy kosztu stałego na nazwę pustej kategorii (np. „YouTubePremium” → „YouTube Premium”) łączy je
+  zamiast odmawiać; wydatki z obu nazw liczą się razem.
+
 ## 1.3.0
 - Obsługa błędów: komunikaty zawsze na wierzchu (wcześniej chowały się pod oknami), błędy widoczne 6 s i zamykane
   stuknięciem, błąd w oknie kategorii pod polem, wyłapywanie nieoczekiwanych błędów, pasek „Brak internetu”.
