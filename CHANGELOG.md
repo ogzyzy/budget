@@ -3,6 +3,11 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.2.0
+- Koszty stałe odliczają się od konta wspólnego co miesiąc, od miesiąca startu budżetu (u nas: październik 2026 –
+  miesiąc przeniesienia do bazy; można nadpisać polem startMiesiac w bazie), niezależnie od ✓ wpłat.
+- Ekran zmienia się od razu po kliknięciu i nie „mruga”, gdy baza potwierdza zapis.
+
 ## 1.1.0
 - Dane w bazie Firebase Firestore (projekt budzet-domowy-a58aee-368b8, region Warszawa) zamiast arkusza Google.
 - Zapis widoczny od razu i działa bez internetu (dośle się po połączeniu).

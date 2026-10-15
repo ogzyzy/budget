@@ -228,7 +228,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.1.0</p>
+    <p class="wersja">wersja 1.2.0</p>
   </section>
 
   <!-- DODAJ -->
@@ -374,7 +374,9 @@ function obliczStan(raw, m) {
              r1: r[3] === CHECK ? e : 0, r2: r[4] === CHECK ? e : 0 };
   });
   var budget = function (mm) { return pay[mm - 1].r1 + pay[mm - 1].r2; };
-  var act = function (mm) { return budget(mm) > 0; };
+  // koszt stały to koszt stały: odlicza się co miesiąc od miesiąca startu budżetu (raw.startM), niezależnie od ✓ wpłat
+  var startM = Math.min(12, Math.max(1, num_(raw.startM) || 1));
+  var act = function (mm) { return mm >= startM; };
 
   // --- transakcje wspólne ---
   var tx = [];
@@ -432,7 +434,7 @@ function obliczStan(raw, m) {
   var planT = groupsOut.reduce(function (s, g) { return s + g.plan; }, 0);
   var spentT = groupsOut.reduce(function (s, g) { return s + g.spent; }, 0);
 
-  var stan = num_(raw.start), nAct = 0;
+  var stan = num_(raw.start), nAct = 0; // nAct = miesiące z odliczonymi kosztami stałymi
   for (var mm = 1; mm <= m; mm++) { stan += budget(mm); if (act(mm)) nAct++; }
   tx.forEach(function (t) { if (t.m <= m) stan -= t.amount; });
   stan -= fixAll * nAct;
@@ -498,7 +500,7 @@ function obliczStan(raw, m) {
   var me = (function(){ var v = store("budzet_ja"); return v === "0" || v === "1" ? Number(v) : null; })();
 
   // --- samoaktualizacja: telefon potrafi trzymać starą stronę w pamięci; gdy na serwerze jest nowsza, przeładuj ---
-  var APP_V = "1.1.0";
+  var APP_V = "1.2.0";
   (function(){
     if (!window.fetch || location.protocol === "file:") return;
     fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
@@ -535,6 +537,7 @@ function obliczStan(raw, m) {
               projectId: "budzet-domowy-a58aee-368b8", appId: "1:350853075809:web:61df616a621e8567e8ab20" };
   var KOLEKCJE = ["pozycje", "tx", "osobiste", "wyplaty", "rozliczenia"];
   var db = null, RAW = null, IDS = null, docs = { root: undefined }, pendingCols = {}, readyRes, ready = new Promise(function(r){ readyRes = r; });
+  var waiting = {}, before = {}; // tabela → czekamy, aż baza pokaże nasz zapis (do tego czasu ekran trzyma wersję po kliknięciu)
   var ZAPAS = 3; // puste wiersze na końcu tabel – tam lokalne operacje dopisują nowe wpisy
   function revive(k, v){ return v && v.$d ? new Date(v.$d[0], v.$d[1], v.$d[2], v.$d[3] || 12, v.$d[4] || 0) : v; }
   function freeze(k, v){ return this[k] instanceof Date ? { $d: [this[k].getFullYear(), this[k].getMonth(), this[k].getDate(), this[k].getHours(), this[k].getMinutes()] } : v; }
@@ -553,7 +556,10 @@ function obliczStan(raw, m) {
     var tx = docs.tx.slice().sort(byT), os = docs.osobiste.slice().sort(byT), rz = docs.rozliczenia.slice().sort(byT);
     var wyp = {}; docs.wyplaty.forEach(function(x){ wyp[x.id] = x.d; });
     var groups = (r.groups || []).map(val).slice(0, 12); while (groups.length < 12) groups.push("");
-    var raw = { names: [val((r.names || [])[0]), val((r.names || [])[1])], year: val(r.year), start: val(r.start), groups: groups,
+    // miesiąc startu budżetu: ustawiony ręcznie (startMiesiac) albo miesiąc przeniesienia danych do bazy w roku budżetu
+    var startM = Number(r.startMiesiac) || 0;
+    if (!startM && r.zmigrowano) { var zd = new Date(Number(r.zmigrowano)); startM = zd.getFullYear() === Number(val(r.year)) ? zd.getMonth() + 1 : (zd.getFullYear() > Number(val(r.year)) ? 12 : 1); }
+    var raw = { startM: startM || 1, names: [val((r.names || [])[0]), val((r.names || [])[1])], year: val(r.year), start: val(r.start), groups: groups,
       sk: poz.map(function(x){ return [val(x.d.nazwa), val(x.d.grupa), val(x.d.kwota), val(x.d.czyje) || "Wspólne", val(x.d.aktywna)]; }),
       plan: poz.map(function(x){ var p = (x.d.plan || []).slice(0, 12).map(val); while (p.length < 12) p.push(""); return p; }),
       tx: tx.map(function(x){ return [val(x.d.data), val(x.d.pozycja), val(x.d.kwota), val(x.d.opis)]; }),
@@ -568,6 +574,7 @@ function obliczStan(raw, m) {
   function rebuild(){
     if (docs.root === undefined || KOLEKCJE.some(function(c){ return !docs[c]; })) return;
     if (docs.root === null) return; // budżet jeszcze nie istnieje – migracja z arkusza go założy
+    if (Object.keys(waiting).some(function(c){ return waiting[c]; })) return;
     RAW = toRaw(); show_(month); readyRes();
   }
   function startDb(){
@@ -578,17 +585,26 @@ function obliczStan(raw, m) {
     var onErr = function(e){ fail(new Error("Baza danych odrzuciła połączenie: " + (e && e.message || e))); };
     FB.onSnapshot(FB.doc(db, "budzety", KEY), function(snap){
       docs.root = snap.exists() ? snap.data() : null;
+      seen("root", docs.root);
       if (!snap.exists() && !snap.metadata.fromCache) migrate();
       rebuild();
     }, onErr);
     KOLEKCJE.forEach(function(c){
       FB.onSnapshot(FB.collection(db, "budzety", KEY, c), { includeMetadataChanges: true }, function(snap){
         docs[c] = snap.docs.map(function(d){ return { id: d.id, d: d.data() }; });
+        seen(c, docs[c]);
         pendingCols[c] = snap.metadata.hasPendingWrites;
         setRefreshing(KOLEKCJE.some(function(x){ return pendingCols[x]; }));
         rebuild();
       }, onErr);
     });
+  }
+  function snapKey(v){ return JSON.stringify(v, freeze); }
+  function seen(c, v){ if (waiting[c] && snapKey(v) !== before[c]) waiting[c] = false; }
+  function expect(list){
+    list.forEach(function(o){ var c = o.p.length === 2 ? "root" : o.p[2];
+      if (!waiting[c]) { waiting[c] = true; before[c] = snapKey(c === "root" ? docs.root : docs[c]); } });
+    clearTimeout(expect.t); expect.t = setTimeout(function(){ waiting = {}; rebuild(); }, 4000); // bezpiecznik
   }
   function load(m){
     month = m;
@@ -748,7 +764,9 @@ function obliczStan(raw, m) {
     var list = ops(RAW, next);
     if (arg && arg.miesiac) month = Number(arg.miesiac);
     if (!list.length) { show_(month); if (ok) toast(ok); return Promise.resolve(true); }
-    commit(list).catch(function(e){ toast("Nie zapisano: " + ((e && e.message) || "błąd") + " – cofnięto.", true); });
+    expect(list);
+    commit(list).catch(function(e){ waiting = {}; rebuild(); toast("Nie zapisano: " + ((e && e.message) || "błąd") + " – cofnięto.", true); });
+    RAW = next; show_(month); // ekran od razu; potwierdzenie z bazy (onSnapshot) tylko go uzgodni
     if (ok) toast(ok);
     return Promise.resolve(true);
   }
