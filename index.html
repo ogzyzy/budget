@@ -328,6 +328,161 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
 
 <!--PREVIEW-->
 <script>
+/* Logika.gs – kopia 1:1 z projektu Apps Script (obliczenia budżetu) */
+/**
+ * Logika.gs – obliczenia budżetu (te same zasady co w arkuszu).
+ * Funkcja liczy wszystko z „surowych” danych arkusza, więc aplikacja
+ * nie zmienia Pulpitu i nie przeszkadza drugiej osobie.
+ */
+var MIESIACE = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"];
+var CHECK = "✓";
+var AKTUALIZACJA = "Aktualizacja stanu"; // wpis osobisty: różnica między stanem w aplikacji a faktycznym
+var KOREKTA = "Korekta kosztu stałego"; // wpis-korekta: zmiana kwoty kosztu stałego tylko w jednym miesiącu
+
+function num_(v) { return (typeof v === "number" && isFinite(v)) ? v : 0; }
+function blank_(v) { return v === "" || v === null || v === undefined; }
+function isDate_(v) { return v instanceof Date && !isNaN(v.getTime()); }
+function monthOf_(d, year) { return (isDate_(d) && d.getFullYear() === year) ? d.getMonth() + 1 : 0; }
+
+function obliczStan(raw, m) {
+  var n1 = String(raw.names[0]), n2 = String(raw.names[1]);
+  var year = num_(raw.year) || new Date().getFullYear();
+  var groups = raw.groups.filter(function (g) { return !blank_(g); }).map(String);
+
+  // --- pozycje (Stałe koszty) ---
+  var mods = raw.sk.map(function (r, i) {
+    var name = blank_(r[0]) ? "" : String(r[0]);
+    var own = blank_(r[3]) ? "Wspólne" : String(r[3]);
+    var oc = own === "Wspólne" ? 0 : own === n1 ? 1 : own === n2 ? 2 : 9;
+    var active = name !== "" && r[4] === CHECK;
+    return { i: i, name: name, group: blank_(r[1]) ? "" : String(r[1]), fixed: num_(r[2]), oc: oc, active: active,
+             plan: (raw.plan[i] || []).map(num_) };
+  });
+  var shared = mods.filter(function (x) { return x.active && x.oc === 0; });
+  var pfixK = [0, 0];
+  mods.forEach(function (x) { if (x.active && (x.oc === 1 || x.oc === 2)) pfixK[x.oc - 1] += x.fixed; });
+  var fixAll = shared.reduce(function (s, x) { return s + x.fixed; }, 0);
+
+  // --- wypłaty i przelewy ---
+  var pay = raw.pay.map(function (r) {
+    var e = num_(r[2]);
+    return { c: r[0], d: r[1], e: r[2], t1: r[3] === CHECK, t2: r[4] === CHECK,
+             r1: r[3] === CHECK ? e : 0, r2: r[4] === CHECK ? e : 0 };
+  });
+  var budget = function (mm) { return pay[mm - 1].r1 + pay[mm - 1].r2; };
+  var act = function (mm) { return budget(mm) > 0; };
+
+  // --- transakcje wspólne ---
+  var tx = [];
+  raw.tx.forEach(function (r, i) {
+    var mm = monthOf_(r[0], year);
+    if (mm) tx.push({ row: i, date: r[0], pos: blank_(r[1]) ? "" : String(r[1]), amount: num_(r[2]), desc: blank_(r[3]) ? "" : String(r[3]), m: mm });
+  });
+  var spent = function (name, mm) {
+    var s = 0; tx.forEach(function (t) { if (t.m === mm && t.pos === name) s += t.amount; }); return s;
+  };
+
+  // --- wydatki osobiste ---
+  var pers = [0, 1].map(function (k) {
+    var out = [];
+    (raw.pers[k] || []).forEach(function (r, i) {
+      var mm = monthOf_(r[0], year);
+      if (mm) out.push({ row: i, date: r[0], what: blank_(r[1]) ? "" : String(r[1]), amount: num_(r[2]), pos: blank_(r[3]) ? "" : String(r[3]), m: mm });
+    });
+    return out;
+  });
+  var psm = function (k, mm) { var s = 0; pers[k].forEach(function (p) { if (p.m === mm) s += p.amount; }); return s; };
+  var pcorr = function (k, mm) { var s = 0; pers[k].forEach(function (p) { if (p.m === mm && p.what === KOREKTA) s += p.amount; }); return s; };
+  var corrOf = function (name, oc, mm) {
+    var s = 0;
+    if (oc === 0) tx.forEach(function (t) { if (t.m === mm && t.pos === name && t.desc === KOREKTA) s += t.amount; });
+    else if (oc === 1 || oc === 2) pers[oc - 1].forEach(function (p) { if (p.m === mm && p.pos === name && p.what === KOREKTA) s += p.amount; });
+    return s;
+  };
+
+  // --- rozliczenia ---
+  // owe = nieoddane, paidSum = oddane (kolumna A: osoba1 winna osobie2, B: odwrotnie)
+  var owe = [0, 0], paidSum = [0, 0], rz = [];
+  raw.rz.forEach(function (r, i) {
+    var a = num_(r[0]), b = num_(r[1]), paid = r[2] === CHECK;
+    if (!paid) { owe[0] += a; owe[1] += b; } else { paidSum[0] += a; paidSum[1] += b; }
+    if (!blank_(r[0]) || !blank_(r[1])) rz.push({ row: i, a: a, b: b, paid: paid, note: blank_(r[3]) ? "" : String(r[3]) });
+  });
+  var net = owe[0] - owe[1];
+  var dirs = [n1 + " → " + n2, n2 + " → " + n1];
+
+  // --- grupy (jak bloki na Pulpicie) ---
+  var groupsOut = groups.map(function (g) {
+    var items = shared.filter(function (x) { return x.group === g; }).map(function (x) {
+      return { name: x.name, plan: x.plan[m - 1] + x.fixed, spent: spent(x.name, m) + (act(m) ? x.fixed : 0), fixed: x.fixed };
+    });
+    return { name: g,
+             plan: items.reduce(function (s, x) { return s + x.plan; }, 0),
+             spent: items.reduce(function (s, x) { return s + x.spent; }, 0), items: items };
+  });
+  // wszystkie wspólne pozycje (także bez grupy) – do widoku aplikacji
+  var itemsAll = shared.map(function (x) {
+    return { name: x.name, spent: spent(x.name, m) + (act(m) ? x.fixed : 0), fixed: x.fixed };
+  });
+  var spentAll = itemsAll.reduce(function (s, x) { return s + x.spent; }, 0);
+  var planT = groupsOut.reduce(function (s, g) { return s + g.plan; }, 0);
+  var spentT = groupsOut.reduce(function (s, g) { return s + g.spent; }, 0);
+
+  var stan = num_(raw.start), nAct = 0;
+  for (var mm = 1; mm <= m; mm++) { stan += budget(mm); if (act(mm)) nAct++; }
+  tx.forEach(function (t) { if (t.m <= m) stan -= t.amount; });
+  stan -= fixAll * nAct;
+
+  // --- osoby ---
+  var zm = function (k, mm) {
+    var val = k === 0 ? pay[mm - 1].c : pay[mm - 1].d;
+    var rec = k === 0 ? pay[mm - 1].r1 : pay[mm - 1].r2;
+    if (blank_(val)) return -psm(k, mm);
+    return num_(val) - rec - pfixK[k] - psm(k, mm);
+  };
+  var persons = [0, 1].map(function (k) {
+    var p = pay[m - 1], val = k === 0 ? p.c : p.d, rec = k === 0 ? p.r1 : p.r2;
+    var has = !blank_(val);
+    var zost = has ? num_(val) - rec : 0;
+    var pf = has ? pfixK[k] : 0;
+    var pc = pcorr(k, m);
+    var ps = psm(k, m) - pc;
+    pf += pc;
+    // kto zapłacił/pożyczył – ma mniej, dopóki nieoddane; dłużnik traci dopiero po oddaniu (✓)
+    var adj = k === 0 ? -paidSum[0] - owe[1] : -paidSum[1] - owe[0];
+    var carry = 0; for (var q = 1; q < m; q++) carry += zm(k, q);
+    var zostalo = zost - pf - ps + adj;
+    return { name: k === 0 ? n1 : n2, wyplata: has ? num_(val) : 0, wplata: rec, wplataWeszla: k === 0 ? p.t1 : p.t2,
+             zostaje: zost, stale: pf, wydane: ps, rozliczenia: adj, zostalo: zostalo, carry: carry, masz: zostalo + carry };
+  });
+
+  var fmt = function (d) { var dd = d.getDate(), mo = d.getMonth() + 1; return (dd < 10 ? "0" : "") + dd + "." + (mo < 10 ? "0" : "") + mo; };
+  var plain = function (o) { var c = {}; for (var key in o) c[key] = o[key]; c.date = fmt(o.date); return c; };
+  var lastTx = tx.filter(function (t) { return t.m === m && t.desc !== KOREKTA; }).sort(function (a, b) { return b.date - a.date || b.row - a.row; }).slice(0, 200).map(plain);
+  var lastPers = [0, 1].map(function (k) {
+    return pers[k].filter(function (p) { return p.m === m && p.what !== KOREKTA; }).sort(function (a, b) { return b.date - a.date || b.row - a.row; }).slice(0, 200).map(plain);
+  });
+
+  return {
+    month: m, monthName: MIESIACE[m - 1], months: MIESIACE, year: year, names: [n1, n2],
+    shared: { budget: budget(m), plan: planT, spent: spentT, leftPlan: planT - spentT, free: budget(m) - planT, stan: stan,
+              agreed: num_(pay[m - 1].e), ticks: [pay[m - 1].t1, pay[m - 1].t2], groups: groupsOut,
+              items: itemsAll, spentAll: spentAll },
+    persons: persons,
+    settle: { owe: owe, net: net, dirs: dirs, text: Math.abs(net) < 0.005 ? "Jesteście kwita" : (net > 0 ? dirs[0] : dirs[1]), amount: Math.abs(net), list: rz.slice().reverse() },
+    pay: { c: blank_(pay[m - 1].c) ? "" : num_(pay[m - 1].c), d: blank_(pay[m - 1].d) ? "" : num_(pay[m - 1].d), e: blank_(pay[m - 1].e) ? "" : num_(pay[m - 1].e), t1: pay[m - 1].t1, t2: pay[m - 1].t2 },
+    positions: mods.filter(function (x) { return x.name !== ""; }).map(function (x) {
+      return { row: x.i, name: x.name, group: x.group, fixed: x.fixed, owner: x.oc === 0 ? "Wspólne" : x.oc === 1 ? n1 : x.oc === 2 ? n2 : String(raw.sk[x.i][3]), ownerOk: x.oc !== 9, active: x.name !== "" && raw.sk[x.i][4] === CHECK,
+               month: x.fixed + corrOf(x.name, x.oc, m) };
+    }),
+    groupList: groups, groupFree: raw.groups.filter(function (g) { return blank_(g); }).length,
+    lists: { shared: shared.map(function (x) { return x.name; }),
+             personal: [1, 2].map(function (k) { return mods.filter(function (x) { return x.active && x.oc === k; }).map(function (x) { return x.name; }); }) },
+    recent: { tx: lastTx, pers: lastPers }
+  };
+}
+</script>
+<script>
 (function(){
   var S = null, month = new Date().getMonth() + 1, view = "start", kind = "shared", pos = "", minePos = "", mineWho = 0, dir = 0, busy = false;
   var $ = function(id){ return document.getElementById(id); };
@@ -346,30 +501,74 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
     if (m) { store("budzet_klucz", m[1]); return m[1]; }
     return store("budzet_klucz");
   })();
-  function api(fn, arg){
+  function api(fn, arg, v){
     if (window.PODGLAD) return new Promise(function(res, rej){ setTimeout(function(){ try { res(window.PODGLAD[fn](arg)); } catch(e){ rej(e); } }, 120); });
     if (!KEY) return Promise.reject(new Error("Brak klucza – otwórz aplikację z linku, który dostałeś."));
     var ctl = window.AbortController ? new AbortController() : null; if (ctl) setTimeout(function(){ ctl.abort(); }, 30000);
-    return fetch(API_URL, { method: "POST", signal: ctl ? ctl.signal : undefined, body: JSON.stringify({ k: KEY, fn: fn, arg: arg === undefined ? null : arg }) })
+    return fetch(API_URL, { method: "POST", signal: ctl ? ctl.signal : undefined, body: JSON.stringify({ k: KEY, fn: fn, v: v, arg: arg === undefined ? null : arg }) })
       .then(function(r){ if (!r.ok) throw new Error("Serwer nie odpowiada (" + r.status + ")."); return r.json(); },
             function(){ throw new Error("Brak internetu albo serwer nie odpowiada (30 s)."); })
       .then(function(j){ if (!j || !j.ok) throw new Error((j && j.error) || "Coś poszło nie tak."); return j.data; });
   }
   function toast(msg, err){ var t = $("toast"); t.textContent = msg; t.className = "toast on" + (err ? " err" : ""); clearTimeout(toast.t); toast.t = setTimeout(function(){ t.className = "toast"; }, 2200); }
-  // Ostatni stan każdego miesiąca jest zapamiętany na telefonie: pokazujemy go od razu,
-  // a świeże dane z arkusza dociągamy w tle. gen chroni przed nadpisaniem wyniku nowszego zapisu starszym odczytem.
-  var gen = 0;
-  function cached(m){ try { var c = JSON.parse(store("budzet_stan_" + m) || "null"); return c && c.month === m ? c : null; } catch(e){ return null; } }
-  function remember(s){ try { store("budzet_stan_" + s.month, JSON.stringify(s)); } catch(e){} }
+  // --- dane: kopia arkusza (RAW) trzymana na telefonie, stan liczony tu (Logika.gs) ---
+  // Otwarcie i zmiana miesiąca działają od razu z RAW; świeże dane dociągamy w tle.
+  // Proste zapisy pokazujemy natychmiast i wysyłamy w tle (kolejka); po błędzie zmiana się cofa.
+  var RAW = null, gen = 0, queue = Promise.resolve(), pending = 0;
+  function revive(k, v){ return v && v.$d ? new Date(v.$d[0], v.$d[1], v.$d[2], v.$d[3] || 12, v.$d[4] || 0) : v; }
+  function freeze(k, v){ return this[k] instanceof Date ? { $d: [this[k].getFullYear(), this[k].getMonth(), this[k].getDate(), this[k].getHours(), this[k].getMinutes()] } : v; }
+  function copyRaw(r){ return JSON.parse(JSON.stringify(r, freeze), revive); }
+  (function(){ try { var c = store("budzet_raw"); if (c) RAW = JSON.parse(c, revive); } catch(e){ RAW = null; } })();
+  function keepRaw(r){ RAW = r; try { store("budzet_raw", JSON.stringify(r, freeze)); } catch(e){} }
+  function rawApi(fn, arg){ return api(fn, arg, 2).then(function(d){ return JSON.parse(JSON.stringify(d), revive); }); }
+  function show_(m){ set(obliczStan(RAW, m)); }
+  function setRefreshing(on){ document.body.classList.toggle("refreshing", !!on); }
+  function refresh(){
+    var g = ++gen; setRefreshing(true);
+    return rawApi("pobierzStan", month).then(function(r){ if (g !== gen || pending) return; keepRaw(r); setRefreshing(false); show_(month); })
+      .catch(function(e){ if (g !== gen) return; setRefreshing(false); if (S) toast("Nie udało się odświeżyć – pokazuję ostatnie dane.", true); else fail(e); });
+  }
   function load(m){
-    var g = ++gen, c = cached(m);
-    if (c) { set(c); document.body.classList.add("refreshing"); } else document.body.classList.add("loading");
-    return api("pobierzStan", m).then(function(s){ if (g !== gen) return; remember(s); document.body.classList.remove("refreshing"); set(s); })
-      .catch(function(e){ if (g !== gen) return; document.body.classList.remove("refreshing");
-        if (c) { busy = false; toast("Nie udało się odświeżyć – pokazuję ostatnie dane.", true); } else fail(e); });
+    if (RAW) { show_(m); return pending ? Promise.resolve() : refresh(); }
+    document.body.classList.add("loading"); month = m;
+    var g = ++gen;
+    return rawApi("pobierzStan", m).then(function(r){ if (g !== gen) return; keepRaw(r); show_(m); }).catch(fail);
   }
   function set(s){ S = s; month = s.month; document.body.classList.remove("loading"); busy = false; render(); }
   function fail(e){ document.body.classList.remove("loading"); busy = false; var msg = (e && e.message) || "Coś poszło nie tak."; if (!S) { $("bladTxt").textContent = msg; $("blad").className = "blad on"; } else toast(msg, true); }
+
+  // lokalne odpowiedniki zapisów z Kod.gs (te same zasady i komunikaty)
+  function kw(v){ var n = Number(String(v).replace(/\s/g, "").replace(",", ".")); if (!isFinite(n) || n <= 0) throw new Error("Kwota musi być większa od zera."); return Math.round(n * 100) / 100; }
+  function dt(iso){ var p = String(iso || "").split("-"); if (p.length !== 3) return new Date(); return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]), 12, 0, 0); }
+  function empty(rows){ for (var i = 0; i < rows.length; i++) if (rows[i].slice(0, 4).every(function(x){ return x === "" || x === null; })) return i; throw new Error("Tabela jest pełna – dodajcie wiersze w arkuszu."); }
+  var LOCAL = {
+    dodajWydatek: function(r, d){ if (!String(d.pozycja || "").trim()) throw new Error("Wybierz kategorię."); r.tx[empty(r.tx)] = [dt(d.data), d.pozycja || "", kw(d.kwota), d.opis || ""]; },
+    dodajOsobisty: function(r, d){ var t = r.pers[Number(d.osoba) === 1 ? 1 : 0]; t[empty(t)] = [dt(d.data), d.opis || "", kw(d.kwota), d.pozycja || ""]; },
+    usunWpis: function(r, d){ var t = d.typ === "tx" ? r.tx : d.typ === "os" ? r.pers[Number(d.osoba) === 1 ? 1 : 0] : d.typ === "rz" ? r.rz : null; if (t && t[Number(d.row)]) t[Number(d.row)] = ["", "", "", ""]; },
+    zapiszWyplaty: function(r, d){ var v = function(x){ return (x === "" || x === null || x === undefined) ? "" : kw(x); }; var p = r.pay[Number(d.miesiac) - 1]; p[0] = v(d.c); p[1] = v(d.d); p[2] = v(d.e); },
+    ustawPrzelew: function(r, d){ r.pay[Number(d.miesiac) - 1][Number(d.osoba) === 1 ? 4 : 3] = d.wszedl ? "✓" : ""; },
+    dodajRozliczenie: function(r, d){ var k = kw(d.kwota), b = Number(d.kierunek) === 1; r.rz[empty(r.rz)] = [b ? "" : k, b ? k : "", "", d.opis || ""]; },
+    ustawOddane: function(r, d){ if (r.rz[Number(d.row)]) r.rz[Number(d.row)][2] = d.oddane ? "✓" : ""; }
+  };
+  function call(fn, arg, ok){
+    var m = arg && arg.miesiac ? Number(arg.miesiac) : month;
+    if (RAW && LOCAL[fn]) {
+      var before = RAW, next = copyRaw(RAW);
+      try { LOCAL[fn](next, arg); } catch(e){ toast(e.message, true); return Promise.resolve(false); }
+      gen++; setRefreshing(true); pending++;
+      RAW = next; show_(m); if (ok) toast(ok);
+      queue = queue.then(function(){ return rawApi(fn, arg); }).then(function(r){
+        pending--; if (!pending) { keepRaw(r); setRefreshing(false); show_(month); }
+      }, function(e){
+        pending--; setRefreshing(pending > 0); RAW = before; keepRaw(before); show_(month);
+        toast("Nie zapisano: " + ((e && e.message) || "błąd") + " – cofnięto.", true);
+        refresh();
+      });
+      return Promise.resolve(true);
+    }
+    if (busy) return Promise.resolve(); busy = true; document.body.classList.add("loading"); gen++;
+    return queue.then(function(){ return rawApi(fn, arg); }).then(function(r){ keepRaw(r); setRefreshing(false); show_(m); if (ok) toast(ok); return true; }).catch(function(e){ setRefreshing(false); fail(e); return false; });
+  }
 
   // --- render ---
   function render(){
@@ -674,7 +873,6 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
     };
     return b;
   }
-  function call(fn, arg, ok){ if (busy) return Promise.resolve(); busy = true; document.body.classList.add("loading"); gen++; document.body.classList.remove("refreshing"); return api(fn, arg).then(function(s){ remember(s); set(s); if (ok) toast(ok); return true; }).catch(function(e){ fail(e); return false; }); }
   function remove(d){ d.miesiac = month; call("usunWpis", d, "Usunięto"); }
   function today(){ var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
   function amount(){ var v = $("amt").value.replace(/\s/g, "").replace(",", "."); var n = Number(v); return isFinite(n) && n > 0 ? n : 0; }
