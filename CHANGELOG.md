@@ -3,6 +3,10 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.5.1
+- „Stałe” pokazuje tylko kategorie z kwotą; kategorie bez kwoty (19 z szablonu arkusza) zostają do wyboru
+  przy dodawaniu wydatku. Koszt stały o nazwie takiej kategorii nadal ją przejmuje.
+
 ## 1.5.0
 - Ekran Start, karta „Wspólne konto”: zamiast podsumowania wszystkich kategorii – jedna linia „Koszty stałe”
   (suma wspólnych kosztów stałych miesiąca, z korektami tylko na ten miesiąc) i osobno tylko wydatki dodane

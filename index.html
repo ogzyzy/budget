@@ -234,7 +234,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.5.0</p>
+    <p class="wersja">wersja 1.5.1</p>
   </section>
 
   <!-- DODAJ -->
@@ -531,7 +531,7 @@ function obliczStan(raw, m) {
 
   // --- samoaktualizacja: telefon trzyma aplikację w tle i wznawia starą wersję bez przeładowania,
   // więc sprawdzamy przy starcie i przy każdym powrocie do aplikacji (najwyżej raz na 10 s) ---
-  var APP_V = "1.5.0";
+  var APP_V = "1.5.1";
   function checkUpdate(){
     if (!window.fetch || location.protocol === "file:") return;
     if (checkUpdate.last && Date.now() - checkUpdate.last < 10000) return;
@@ -1167,20 +1167,6 @@ function obliczStan(raw, m) {
       });
       box.appendChild(l);
     });
-    // kategorie bez kwoty stałej też tu widać – stuknięcie pozwala ustawić kwotę (nic się nie chowa)
-    var bez = S.positions.filter(function(p){ return !(p.fixed > 0); });
-    if (bez.length) {
-      box.appendChild(el("div", "pos-group", "Kategorie bez kwoty stałej – stuknij, żeby ustawić kwotę"));
-      var lb = el("div", "pos-list");
-      bez.forEach(function(p){
-        var r = el("div", "fx-row off");
-        var nb = el("button", "fx-name"); nb.type = "button";
-        var t = el("span", "", p.name + " ›"); t.appendChild(el("small", "", own(p) === "Wspólne" ? "wspólna" : own(p)));
-        nb.appendChild(t); nb.onclick = function(){ openPos(p, null, null, true, false, true); }; r.appendChild(nb);
-        r.appendChild(el("span", "num sub", "—")); lb.appendChild(r);
-      });
-      box.appendChild(lb);
-    }
   }
 
   // --- akcje ---
