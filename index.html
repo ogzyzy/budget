@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Budżet">
+<meta name="theme-color" content="#EEF2EE">
+<meta name="referrer" content="no-referrer">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Budżet domowy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEF2EE; --surface:#FFFFFF; --surface2:#F6F8F5; --ink:#1C2420; --muted:#66716B; --line:#DCE3DD;
+  --shared:#3E7C59; --shared-soft:#DCEBE1; --p1:#2F6FB0; --p1-soft:#DCE8F5; --p2:#9C4A7B; --p2-soft:#F2DEEA;
+  --settle:#B7832A; --settle-soft:#F6EAD2; --over:#C0412F; --over-soft:#F7DDD8;
+  --r-lg:22px; --r-md:14px; --r-sm:10px;
+  --num:"Bricolage Grotesque", system-ui, sans-serif; --txt:-apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#111613; --surface:#1A201C; --surface2:#212823; --ink:#E9EEEA; --muted:#98A39C; --line:#2C3530;
+  --shared:#6DBB8C; --shared-soft:#1F3428; --p1:#7EB0E6; --p1-soft:#1C2A3A; --p2:#D98BBB; --p2-soft:#36202D;
+  --settle:#E2B45E; --settle-soft:#3A2F1A; --over:#EF8070; --over-soft:#3D221D; } }
+:root[data-theme="dark"]{
+  --bg:#111613; --surface:#1A201C; --surface2:#212823; --ink:#E9EEEA; --muted:#98A39C; --line:#2C3530;
+  --shared:#6DBB8C; --shared-soft:#1F3428; --p1:#7EB0E6; --p1-soft:#1C2A3A; --p2:#D98BBB; --p2-soft:#36202D;
+  --settle:#E2B45E; --settle-soft:#3A2F1A; --over:#EF8070; --over-soft:#3D221D; color-scheme:dark }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ color-scheme:dark } }
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 var(--txt)}
+body{padding:0 0 calc(92px + env(safe-area-inset-bottom))}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--p1);outline-offset:2px}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.wrap{max-width:520px;margin:0 auto;padding:0 16px}
+
+/* górny pasek z miesiącem */
+.top{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(10px + env(safe-area-inset-top)) 0 8px}
+.top .wrap{display:flex;align-items:center;gap:8px}
+.month{flex:1;display:flex;align-items:center;justify-content:center;gap:6px}
+.month b{font-family:var(--num);font-weight:800;font-size:21px;min-width:0;text-align:center}
+.icon-btn{width:40px;height:40px;border-radius:50%;border:0;background:var(--surface);display:grid;place-items:center;font-size:20px;cursor:pointer}
+.who{border:0;background:var(--surface);border-radius:999px;padding:8px 12px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none}
+.d1{background:var(--p1)} .d2{background:var(--p2)} .ds{background:var(--shared)} .dz{background:var(--settle)}
+
+/* karty */
+.card{background:var(--surface);border-radius:var(--r-lg);padding:16px;margin:12px 0}
+.card h2{font:700 15px/1.2 var(--txt);margin:0 0 10px;color:var(--muted)}
+.row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-top:1px solid var(--line);font-size:15px}
+.row:first-of-type{border-top:0}
+.row .num{font-weight:500}
+.neg{color:var(--over)} .pos{color:var(--shared)}
+
+/* hero: wolne środki */
+.hero{padding:6px 0 2px}
+.hero h1{font:800 15px/1 var(--txt);color:var(--muted);margin:14px 4px 10px}
+.free{display:grid;gap:8px}
+.free-line{display:grid;grid-template-columns:6px 1fr auto;gap:12px;align-items:center;background:var(--surface);border-radius:var(--r-md);padding:12px 14px 12px 12px}
+.free-line .spine{width:6px;height:100%;min-height:44px;border-radius:3px}
+.free-line .lbl{font-size:14px;color:var(--muted);line-height:1.25}
+.free-line .lbl strong{display:block;color:var(--ink);font-size:16px}
+.free-line .val{font-family:var(--num);font-weight:800;font-size:30px;letter-spacing:-.02em}
+.free-line.me{outline:2px solid var(--line)}
+.pdet summary{list-style:none;cursor:pointer}
+.row .num{white-space:nowrap}
+.pdet summary::-webkit-details-marker{display:none}
+.pdet .val::after{content:"›";display:inline-block;margin-left:8px;font-size:20px;color:var(--muted);transition:transform .15s}
+.pdet[open] .val::after{transform:rotate(90deg)}
+.pdet .rows{background:var(--surface);border-radius:var(--r-md);padding:4px 14px 10px;margin-top:4px}
+
+.alert{display:flex;gap:10px;align-items:center;background:var(--settle-soft);border-radius:var(--r-md);padding:12px 14px;margin:12px 0;font-size:14px;border:0;width:100%;text-align:left;cursor:pointer}
+.bar{height:10px;border-radius:5px;background:var(--surface2);overflow:hidden;margin:8px 0 4px}
+.bar i{display:block;height:100%;border-radius:5px;background:var(--shared)}
+.bar i.over{background:var(--over)}
+.big{font-family:var(--num);font-weight:800;font-size:34px;letter-spacing:-.02em;line-height:1.05}
+.sub{font-size:13px;color:var(--muted)}
+
+/* grupy */
+.grp{border-top:1px solid var(--line);padding:10px 0}
+.grp:first-of-type{border-top:0}
+.grp summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:2px 10px}
+.grp summary::-webkit-details-marker{display:none}
+.grp .gname{font-weight:600}
+.grp .gval{font-family:var(--num);font-weight:500;text-align:right}
+.grp .bar{grid-column:1/-1;height:6px;margin:4px 0 0}
+.grp .items{margin:8px 0 2px;padding-left:10px;border-left:2px solid var(--line)}
+.grp .it{display:flex;justify-content:space-between;font-size:14px;padding:3px 0;color:var(--muted)}
+
+/* osoba */
+.person summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.person summary::-webkit-details-marker{display:none}
+.person .pname{display:flex;gap:8px;align-items:center;font-weight:700}
+.person .rows{margin-top:8px}
+
+/* formularze */
+.seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface);border-radius:var(--r-md);padding:4px;gap:4px;margin:12px 0}
+.seg button{border:0;background:transparent;border-radius:var(--r-sm);padding:10px 4px;font-weight:600;font-size:14px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.amount{display:flex;align-items:baseline;justify-content:center;gap:6px;background:var(--surface);border-radius:var(--r-lg);padding:22px 16px;margin:12px 0}
+.amount input{border:0;background:transparent;font-family:var(--num);font-weight:800;font-size:52px;width:100%;text-align:right;outline:none;letter-spacing:-.02em}
+.amount span{font-family:var(--num);font-size:24px;color:var(--muted)}
+.field{display:block;margin:10px 0}
+.field > span{display:block;font-size:13px;color:var(--muted);margin:0 0 6px 4px}
+.field input,.field select{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:var(--r-md);padding:13px 14px;font-size:16px;appearance:none}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:9px 14px;font-size:14px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.dir{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dir button{border:2px solid var(--line);background:var(--surface);border-radius:var(--r-md);padding:14px 8px;font-weight:700;cursor:pointer}
+.dir button[aria-pressed="true"]{border-color:var(--settle);background:var(--settle-soft)}
+.primary{width:100%;border:0;border-radius:var(--r-md);padding:16px;font-weight:700;font-size:17px;background:var(--ink);color:var(--surface);cursor:pointer;margin:14px 0 4px}
+.primary:disabled{opacity:.45}
+
+/* lista wpisów */
+.entry{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.entry:first-of-type{border-top:0}
+.entry .when{font-size:12px;color:var(--muted);width:38px}
+.entry .what{font-size:15px;line-height:1.2}
+.entry .what small{display:block;color:var(--muted);font-size:12px}
+.entry .num{font-weight:600}
+.x{border:0;background:transparent;color:var(--muted);font-size:18px;min-width:34px;height:34px;border-radius:17px;cursor:pointer;padding:0 8px;white-space:nowrap}
+.x.armed{background:var(--over);color:#fff;font-size:13px;font-weight:700}
+.empty{color:var(--muted);font-size:14px;padding:6px 0}
+
+/* przełącznik ✓ */
+.tick{display:flex;align-items:center;justify-content:space-between;width:100%;border:0;background:var(--surface);border-radius:var(--r-md);padding:14px;margin:8px 0;cursor:pointer;font-size:16px;text-align:left}
+.tick .box{width:34px;height:34px;border-radius:10px;border:2px solid var(--line);display:grid;place-items:center;font-size:20px;font-weight:800;color:transparent}
+.tick[aria-pressed="true"] .box{background:var(--shared);border-color:var(--shared);color:#fff}
+.tick small{display:block;color:var(--muted);font-size:13px}
+
+/* rozliczenia */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cols > div{background:var(--surface);border-radius:var(--r-md);padding:12px}
+.settle-res{background:var(--settle-soft);border-radius:var(--r-lg);padding:16px;margin:12px 0;text-align:center}
+.rz-entry{display:grid;grid-template-columns:1fr auto 44px 34px;gap:8px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.rz-entry:first-of-type{border-top:0}
+.rz-entry.paid .num,.rz-entry.paid .what{color:var(--muted);text-decoration:line-through}
+.rz-entry .mini{width:40px;height:40px;border-radius:10px;border:2px solid var(--line);background:transparent;font-size:18px;font-weight:800;color:transparent;cursor:pointer}
+.rz-entry.paid .mini{background:var(--shared);border-color:var(--shared);color:#fff}
+
+/* dolny pasek */
+.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom));z-index:10}
+.tabs .wrap{display:grid;grid-template-columns:repeat(5,1fr);align-items:end;padding:0}
+.foot-link{display:block;margin:18px auto 4px;text-align:center}
+.fx-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.fx-sum div{background:var(--surface2);border-radius:var(--r-sm);padding:8px 10px}
+.fx-sum b{display:block;font:700 18px var(--num)}
+.it-zero{color:var(--muted)}
+.fx-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;background:var(--surface);border-top:1px solid var(--line);padding:8px 14px}
+.pos-list .fx-row:first-child{border-top:0}
+.fx-row.off{opacity:.5}
+.fx-name{border:0;background:transparent;text-align:left;font-size:16px;padding:6px 0;cursor:pointer;min-width:0}
+.fx-name small{display:block;color:var(--muted);font-size:13px}
+.fx-in{width:104px;border:1px solid var(--line);background:var(--surface2);border-radius:var(--r-sm);padding:9px 10px;font-size:17px;font-weight:700;text-align:right}
+#v-mine .btn-row{grid-template-columns:1.4fr 1fr}
+.fx-edit{display:flex;gap:6px;align-items:center}
+.fx-ok{border:0;border-radius:var(--r-sm);background:var(--ink);color:var(--surface);font-weight:700;font-size:14px;padding:10px 12px;cursor:pointer}
+.fx-in.changed{border-color:var(--settle);background:var(--settle-soft)}
+.tab{border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:var(--muted);padding:6px 0;cursor:pointer}
+.tab svg{width:24px;height:24px}
+.tab[aria-current="page"]{color:var(--ink);font-weight:700}
+.tab.add{color:var(--surface)}
+.tab.add .plus{width:54px;height:54px;border-radius:50%;background:var(--ink);display:grid;place-items:center;margin-top:-22px;box-shadow:0 0 0 5px var(--bg)}
+.tab.add span{color:var(--muted)}
+
+.toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);opacity:0;background:var(--ink);color:var(--surface);padding:11px 18px;border-radius:999px;font-size:15px;transition:.25s;pointer-events:none;z-index:20;white-space:nowrap}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:var(--over);color:#fff}
+.loading{opacity:.55;pointer-events:none}
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:flex-end;z-index:30}
+.sheet-bg.on{display:flex}
+.sheet{background:var(--surface);width:100%;border-radius:24px 24px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom))}
+.sheet h3{margin:0 0 4px;font:800 22px var(--num)}
+.who-pick{display:grid;gap:10px;margin-top:14px}
+.who-pick button{display:flex;align-items:center;gap:12px;border:2px solid var(--line);background:var(--surface);border-radius:var(--r-md);padding:16px;font-size:18px;font-weight:700;cursor:pointer}
+.chip.add{border-style:dashed;color:var(--muted)}
+.add-btn{display:block;width:100%;border:1.5px dashed var(--muted);background:transparent;color:var(--ink);border-radius:var(--r-md);padding:14px;font-weight:700;font-size:16px;cursor:pointer;margin:12px 0}
+.card .add-btn{margin:12px 0 0}
+.lbl-row{display:flex;justify-content:space-between;align-items:baseline;margin:0 4px 6px}
+.lbl-row span{font-size:13px;color:var(--muted)}
+.link{border:0;background:none;color:var(--p1);font-size:14px;font-weight:600;cursor:pointer;padding:4px}
+.sheet{max-height:88vh;overflow:auto}
+.sheet .field{margin:12px 0}
+.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.btn-sec{border:1px solid var(--line);background:var(--surface);border-radius:var(--r-md);padding:15px;font-weight:700;font-size:16px;cursor:pointer}
+.btn-row .primary{margin:0}
+.del-wide{width:100%;margin-top:10px;border:1px solid var(--over);background:transparent;color:var(--over);border-radius:var(--r-md);padding:13px;font-weight:700;cursor:pointer}
+.del-wide.armed{background:var(--over);color:#fff}
+.pos-group{margin:14px 0 4px 4px;font-weight:700;color:var(--muted);font-size:14px}
+.pos-item{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;border:0;background:var(--surface);border-top:1px solid var(--line);padding:12px 14px;text-align:left;cursor:pointer;font-size:16px}
+.pos-list{border-radius:var(--r-md);overflow:hidden}
+.pos-list .pos-item:first-child{border-top:0}
+.pos-item small{display:block;color:var(--muted);font-size:13px}
+.pos-item.off{opacity:.5}
+.back{display:flex;align-items:center;gap:6px;margin:4px 0 8px}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <button class="icon-btn" id="prev" aria-label="Poprzedni miesiąc">‹</button>
+    <div class="month"><b id="monthName">…</b></div>
+    <button class="icon-btn" id="next" aria-label="Następny miesiąc">›</button>
+  </div>
+</header>
+
+<main class="wrap" id="app">
+  <!-- START -->
+  <section id="v-start">
+    <button class="alert" id="payAlert" hidden></button>
+    <div class="card" id="sharedCard"></div>
+    <div class="card" id="settleCard" role="button" tabindex="0" style="cursor:pointer" aria-label="Przejdź do rozliczeń"></div>
+    <div class="hero">
+      <h1>Wolne środki</h1>
+      <div class="free" id="freeList"></div>
+    </div>
+    <button type="button" class="link foot-link" id="whoBtn"></button>
+  </section>
+
+  <!-- DODAJ -->
+  <section id="v-add" hidden>
+    <button type="button" class="link back" id="addBack">‹ Wróć</button>
+    <h2 id="addTitle" style="font:800 24px var(--num);margin:0 4px 4px"></h2>
+    <div class="seg" role="group" aria-label="Rodzaj wpisu" hidden>
+      <button data-kind="shared" aria-pressed="true">Wspólny</button>
+      <button data-kind="mine" aria-pressed="false">Osobisty</button>
+      <button data-kind="settle" aria-pressed="false">Rozliczenie</button>
+    </div>
+    <label class="amount"><input id="amt" class="num" inputmode="decimal" placeholder="0" autocomplete="off" aria-label="Kwota"><span>zł</span></label>
+
+    <div id="f-shared">
+      <div class="field"><div class="lbl-row"><span>Kategoria</span><button type="button" class="link" data-open-pos>Edytuj kategorie</button></div><div class="chips" id="sharedChips"></div></div>
+    </div>
+    <div id="f-mine" hidden>
+      <div class="field" hidden><span>Czyj wydatek</span><div class="chips" id="mineWho"></div></div>
+      <div class="field"><div class="lbl-row"><span>Kategoria</span><button type="button" class="link" data-open-pos>Edytuj kategorie</button></div><div class="chips" id="mineChips"></div></div>
+    </div>
+    <div id="f-settle" hidden>
+      <div class="field"><span>Kto oddaje komu</span><div class="dir" id="dirBtns"></div></div>
+    </div>
+    <label class="field"><span id="descLbl">Opis (opcjonalnie)</span><input id="desc" autocomplete="off" placeholder="np. Biedronka"></label>
+    <label class="field" id="dateField"><span>Data</span><input id="date" type="date"></label>
+    <button class="primary" id="saveBtn">Zapisz wydatek</button>
+
+  </section>
+
+  <!-- WYPŁATY -->
+  <section id="v-pay" hidden>
+    <div class="card">
+      <h2>Wypłaty w tym miesiącu</h2>
+      <label class="field"><span id="pay1Lbl">Wypłata</span><input id="pay1" class="num" inputmode="decimal" placeholder="0"></label>
+      <label class="field"><span id="pay2Lbl">Wypłata</span><input id="pay2" class="num" inputmode="decimal" placeholder="0"></label>
+      <label class="field"><span>Wpłata na wspólne konto</span><input id="payE" class="num" inputmode="decimal" placeholder="0"></label>
+      <button class="primary" id="paySave">Zapisz wypłaty</button>
+    </div>
+    <h2 style="font:700 15px var(--txt);color:var(--muted);margin:18px 4px 4px">Przelew na wspólne wykonany</h2>
+    <button class="tick" id="tick1"></button>
+    <button class="tick" id="tick2"></button>
+  </section>
+
+  <!-- ROZLICZENIA -->
+  <section id="v-mine" hidden>
+    <div class="seg" id="mineSeg" role="group" aria-label="Czyje wydatki" style="grid-template-columns:1fr 1fr"></div>
+    <div class="card" id="mineSummary"></div>
+    <div class="btn-row" style="margin:12px 0"><button type="button" class="add-btn" id="mineAdd" style="margin:0">+ Dodaj wydatek</button><button type="button" class="btn-sec" id="balBtn">Aktualizuj stan</button></div>
+    <div class="card"><h2 id="byTitle">Kategorie</h2><div id="mineByPos"></div></div>
+    <div class="card"><h2 id="mineListTitle">Historia</h2><div id="mineList"></div></div>
+  </section>
+  <section id="v-pos" hidden>
+    <button type="button" class="link back" id="posBack">‹ Wróć</button>
+    <h2 style="font:800 24px var(--num);margin:0 4px 4px">Kategorie</h2>
+    <button type="button" class="add-btn" id="posNew">+ Dodaj kategorię</button>
+    <div id="posList"></div>
+  </section>
+  <section id="v-settle" hidden>
+    <div class="settle-res" id="settleRes"></div>
+    <button type="button" class="add-btn" id="settleAdd">+ Dodaj rozliczenie</button>
+    <div class="card" id="settleListCard"><h2>Historia</h2><div id="settleList"></div></div>
+  </section>
+  <section id="v-fixed" hidden>
+    <div class="card" id="fixedSum"></div>
+    <button type="button" class="add-btn" id="fixedAdd">+ Dodaj koszt stały</button>
+    <div id="fixedList"></div>
+  </section>
+</main>
+
+<nav class="tabs" aria-label="Nawigacja">
+  <div class="wrap">
+    <button class="tab" data-view="start" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Start</button>
+    <button class="tab" data-view="fixed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Stałe</button>
+    <button class="tab" data-view="settle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h12l-3-3M17 17H5l3 3"/></svg>Rozliczenia</button>
+    <button class="tab" data-view="pay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg>Wypłaty</button>
+    <button class="tab" data-view="mine"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Osobiste</button>
+  </div>
+</nav>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="sheet-bg" id="posSheet"><div class="sheet" role="dialog" aria-labelledby="posTitle">
+  <h3 id="posTitle">Nowa kategoria</h3>
+  <label class="field"><span>Nazwa</span><input id="posName" autocomplete="off" placeholder="np. Czynsz, Netflix, Biedronka"></label>
+  <div class="field" id="posOwnerField"><span>Czyja</span><div class="chips" id="posOwner"></div></div>
+  <button type="button" class="tick" id="posFixedTick" style="background:var(--surface2)"></button>
+  <label class="field" id="posFixedField"><span>Kwota co miesiąc</span><input id="posFixed" class="num" inputmode="decimal" placeholder="np. 99"></label>
+  <button type="button" class="tick" id="posActive" style="background:var(--surface2)"></button>
+  <div class="btn-row"><button type="button" class="btn-sec" id="posCancel">Anuluj</button><button type="button" class="primary" id="posSave">Zapisz</button></div>
+  <button type="button" class="del-wide" id="posDel" hidden>Usuń kategorię</button>
+</div></div>
+<div class="sheet-bg" id="balSheet"><div class="sheet" role="dialog" aria-labelledby="balTitle">
+  <h3 id="balTitle">Aktualizuj stan</h3>
+  <div class="row" style="border:0"><span>Aplikacja liczy</span><span class="num" id="balNow"></span></div>
+  <label class="field"><span>Ile masz naprawdę?</span><input id="balIn" class="num" inputmode="decimal" placeholder="0" autocomplete="off"></label>
+  <p class="sub" id="balInfo" style="min-height:18px;margin:0 4px"></p>
+  <div class="btn-row"><button type="button" class="btn-sec" id="balCancel">Anuluj</button><button type="button" class="primary" id="balSave">Zapisz</button></div>
+</div></div>
+<div class="sheet-bg" id="whoSheet"><div class="sheet"><h3>Kim jesteś?</h3><p class="sub">Zapamiętam to na tym telefonie.</p><div class="who-pick" id="whoPick"></div></div></div>
+
+<!--PREVIEW-->
+<script>
+(function(){
+  var S = null, month = new Date().getMonth() + 1, view = "start", kind = "shared", pos = "", minePos = "", mineWho = 0, dir = 0, busy = false;
+  var $ = function(id){ return document.getElementById(id); };
+  var fmt0 = new Intl.NumberFormat("pl-PL", {maximumFractionDigits: 0});
+  var fmt2 = new Intl.NumberFormat("pl-PL", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  function zl(v, dec){ v = Number(v) || 0; var f = (dec && Math.round(v) !== v) ? fmt2 : fmt0; return (v < 0 ? "−" : "") + f.format(Math.abs(v)) + " zł"; }
+  function el(tag, cls, text){ var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+  function store(k, v){ try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch(e){ return null; } }
+  var me = (function(){ var v = store("budzet_ja"); return v === "0" || v === "1" ? Number(v) : null; })();
+
+  // --- połączenie z arkuszem przez Api.gs (albo podgląd na przykładowych danych) ---
+  var API_URL = "https://script.google.com/macros/s/AKfycbybA3YrD-JsK8jaTGtfccQLsvROY0Kz4BocZA51taOReVi1gcNlTcZ4076561S-ERBBMQ/exec";
+  // klucz przychodzi w linku (?k=...), zapamiętujemy go na tym urządzeniu; w kodzie strony go nie ma
+  var KEY = (function(){
+    var m = (location.search + location.hash).match(/[?#&]k=([A-Za-z0-9_-]+)/);
+    if (m) { store("budzet_klucz", m[1]); return m[1]; }
+    return store("budzet_klucz");
+  })();
+  function api(fn, arg){
+    if (window.PODGLAD) return new Promise(function(res, rej){ setTimeout(function(){ try { res(window.PODGLAD[fn](arg)); } catch(e){ rej(e); } }, 120); });
+    if (!KEY) return Promise.reject(new Error("Brak klucza – otwórz aplikację z linku, który dostałeś."));
+    return fetch(API_URL, { method: "POST", body: JSON.stringify({ k: KEY, fn: fn, arg: arg === undefined ? null : arg }) })
+      .then(function(r){ if (!r.ok) throw new Error("Serwer nie odpowiada (" + r.status + ")."); return r.json(); },
+            function(){ throw new Error("Brak internetu albo serwer nie odpowiada."); })
+      .then(function(j){ if (!j || !j.ok) throw new Error((j && j.error) || "Coś poszło nie tak."); return j.data; });
+  }
+  function toast(msg, err){ var t = $("toast"); t.textContent = msg; t.className = "toast on" + (err ? " err" : ""); clearTimeout(toast.t); toast.t = setTimeout(function(){ t.className = "toast"; }, 2200); }
+  function load(m){ document.body.classList.add("loading"); return api("pobierzStan", m).then(set).catch(fail); }
+  function set(s){ S = s; month = s.month; document.body.classList.remove("loading"); busy = false; render(); }
+  function fail(e){ document.body.classList.remove("loading"); busy = false; toast(e.message || "Coś poszło nie tak.", true); }
+
+  // --- render ---
+  function render(){
+    if (!S) return;
+    $("monthName").textContent = S.monthName;
+    var n = S.names;
+    $("whoBtn").textContent = me === null ? "Wybierz, kim jesteś" : "Ten telefon: " + n[me] + " · zmień";
+    renderStart(); renderAdd(); renderPay(); renderSettle(); renderMine(); renderPos(); renderFixed();
+  }
+
+  function freeLine(color, title, sub, val, isMe){
+    var d = el("div", "free-line" + (isMe ? " me" : ""));
+    var sp = el("span", "spine"); sp.style.background = "var(" + color + ")"; d.appendChild(sp);
+    var l = el("div", "lbl"); l.appendChild(el("strong", "", title)); if (sub) l.appendChild(document.createTextNode(sub)); d.appendChild(l);
+    var v = el("div", "val " + (val < 0 ? "neg" : ""), zl(val)); d.appendChild(v); return d;
+  }
+  function row(label, val, cls){ var r = el("div", "row"); r.appendChild(el("span", "", label)); r.appendChild(el("span", "num " + (cls || ""), typeof val === "string" ? val : zl(val, true))); return r; }
+
+  function renderStart(){
+    var f = $("freeList"); f.textContent = "";
+    var order = me === 1 ? [1, 0] : [0, 1];
+    order.forEach(function(k){
+      var p = S.persons[k];
+      var d = el("details", "pdet"); var sm = el("summary");
+      sm.appendChild(freeLine(k ? "--p2" : "--p1", p.name, "", p.masz, me === k)); d.appendChild(sm);
+      var r = el("div", "rows");
+      r.appendChild(row("Wypłata", p.wyplata));
+      r.appendChild(row("Wpłata na wspólne" + (p.wplataWeszla || S.pay.e === "" ? "" : " (niewykonana)"), -p.wplata));
+      r.appendChild(row("Stałe osobiste", -p.stale));
+      r.appendChild(row("Wydane osobiste", -p.wydane));
+      r.appendChild(row("Rozliczenia", p.rozliczenia, p.rozliczenia < 0 ? "neg" : p.rozliczenia > 0 ? "pos" : ""));
+      if (Math.abs(p.carry) >= 0.5) {
+        r.appendChild(row("Z tego miesiąca", p.zostalo));
+        r.appendChild(row("Z poprzednich miesięcy", p.carry));
+      }
+      d.appendChild(r); f.appendChild(d);
+    });
+
+    var a = $("payAlert"), missing = [];
+    if (S.pay.e !== "") { if (!S.pay.t1) missing.push(S.names[0]); if (!S.pay.t2) missing.push(S.names[1]); }
+    if (S.pay.e === "") { a.hidden = false; a.textContent = "Wpisz wypłaty na " + S.monthName.toLowerCase() + " ›"; }
+    else if (missing.length) { a.hidden = false; a.textContent = "Przelew na wspólne niewykonany: " + missing.join(" i ") + " ›"; }
+    else a.hidden = true;
+
+    var c = $("sharedCard"); c.textContent = "";
+    c.appendChild(el("h2", "", "Wspólne konto"));
+    c.appendChild(el("div", "big " + (S.shared.stan < 0 ? "neg" : ""), zl(S.shared.stan)));
+    var w = el("div"); w.style.marginTop = "12px"; w.appendChild(row("Wydane w tym miesiącu", S.shared.spentAll)); c.appendChild(w);
+    var items = S.shared.items.filter(function(x){ return x.spent > 0; }).sort(function(a, b){ return b.spent - a.spent; });
+    if (items.length) { var bx = el("div"); bx.id = "sharedByPos"; bars(bx, items.map(function(x){ return {k: x.name, v: x.spent}; }), null); c.appendChild(bx); }
+    if (S.recent.tx.length) {
+      c.appendChild(el("h2", "", "Historia")).style.margin = "16px 0 4px";
+      var hl = el("div"); hl.id = "sharedList";
+      entries(hl, sharedAll ? S.recent.tx : S.recent.tx.slice(0, 5), "", function(t){ return {what: t.pos || "bez kategorii", small: t.desc, del: {typ: "tx", row: t.row}}; });
+      c.appendChild(hl);
+      if (S.recent.tx.length > 5) { var mb = el("button", "link", sharedAll ? "Pokaż mniej" : "Pokaż wszystkie (" + S.recent.tx.length + ")"); mb.type = "button"; mb.id = "sharedMore"; mb.onclick = function(){ sharedAll = !sharedAll; renderStart(); }; c.appendChild(mb); }
+    }
+
+    var ab = el("button", "add-btn", "+ Dodaj wydatek"); ab.type = "button"; ab.id = "startAdd";
+    ab.onclick = function(){ openAdd("shared"); }; c.appendChild(ab);
+
+    var sc = $("settleCard"); sc.textContent = "";
+    sc.appendChild(el("h2", "", "Rozliczenia ›"));
+    var sr = el("div", "row"); sr.appendChild(el("strong", "", S.settle.text)); sr.appendChild(el("span", "num big", S.settle.amount ? zl(S.settle.amount, true) : "")); sr.lastChild.style.fontSize = "24px"; sc.appendChild(sr);
+    var sb = el("button", "add-btn", "+ Dodaj rozliczenie"); sb.type = "button"; sb.id = "startSettleAdd"; sb.onclick = function(e){ e.stopPropagation(); show("settle"); }; sc.appendChild(sb);
+    sc.onclick = function(){ show("settle"); };
+  }
+
+  function chips(box, list, current, onPick, allowNone, onAdd){
+    box.textContent = "";
+    if (allowNone) list = [""].concat(list);
+    list.forEach(function(name){
+      var b = el("button", "chip", name || "bez kategorii"); b.type = "button";
+      b.setAttribute("aria-pressed", String(name === current));
+      b.onclick = function(){ onPick(name); };
+      box.appendChild(b);
+    });
+    if (onAdd) { var a = el("button", "chip add", "+ Dodaj kategorię"); a.type = "button"; a.onclick = onAdd; box.appendChild(a); }
+  }
+
+  function varList(owner){ return S.positions.filter(function(p){ return p.active && !p.fixed && (p.ownerOk ? p.owner : "Wspólne") === owner; }).map(function(p){ return p.name; }); }
+  function renderAdd(){
+    document.querySelectorAll(".seg button").forEach(function(b){ b.setAttribute("aria-pressed", String(b.dataset.kind === kind)); });
+    $("addTitle").textContent = kind === "settle" ? "Nowe rozliczenie" : kind === "mine" ? "Wydatek osobisty: " + S.names[mineWho] : "Wspólny wydatek";
+    $("f-shared").hidden = kind !== "shared"; $("f-mine").hidden = kind !== "mine"; $("f-settle").hidden = kind !== "settle";
+    $("dateField").hidden = kind === "settle";
+    $("descLbl").textContent = kind === "settle" ? "Za co" : kind === "mine" ? "Co kupione" : "Opis";
+    $("desc").placeholder = kind === "settle" ? "np. buty" : kind === "mine" ? "np. słuchawki" : "np. Biedronka";
+    $("saveBtn").textContent = kind === "settle" ? "Zapisz rozliczenie" : "Zapisz wydatek";
+    var sl = varList("Wspólne");
+    if (sl.indexOf(pos) < 0) pos = sl[0] || "";
+    chips($("sharedChips"), sl, pos, function(n){ pos = n; renderAdd(); }, false, function(){ openPos(null, "Wspólne", "shared", false, true); });
+    if (me !== null && kind === "mine" && mineWho === null) mineWho = me;
+    chips($("mineWho"), S.names, S.names[mineWho], function(n){ mineWho = S.names.indexOf(n); minePos = ""; renderAdd(); });
+    var pl = varList(S.names[mineWho]);
+    if (pl.indexOf(minePos) < 0) minePos = "";
+    chips($("mineChips"), pl, minePos, function(n){ minePos = n; renderAdd(); }, true, function(){ openPos(null, S.names[mineWho], "mine", false, true); });
+    var db = $("dirBtns"); db.textContent = "";
+    S.settle.dirs.forEach(function(t, k){ var b = el("button", "", t); b.type = "button"; b.setAttribute("aria-pressed", String(dir === k)); b.onclick = function(){ dir = k; renderAdd(); }; db.appendChild(b); });
+
+  }
+
+  function tickBtn(b, label, on, sub){
+    b.textContent = ""; b.setAttribute("aria-pressed", String(on));
+    var l = el("span", "", label); if (sub) l.appendChild(el("small", "", sub)); b.appendChild(l);
+    b.appendChild(el("span", "box", "✓"));
+  }
+  function renderPay(){
+    $("pay1Lbl").textContent = "Wypłata: " + S.names[0]; $("pay2Lbl").textContent = "Wypłata: " + S.names[1];
+    var ae = document.activeElement;
+    if (!(ae && ae.tagName === "INPUT" && ae.closest("#v-pay"))) { $("pay1").value = S.pay.c; $("pay2").value = S.pay.d; $("payE").value = S.pay.e; }
+    var e = S.pay.e === "" ? "" : zl(S.pay.e);
+    tickBtn($("tick1"), S.names[0], S.pay.t1, e);
+    tickBtn($("tick2"), S.names[1], S.pay.t2, e);
+  }
+  var mineView = null, sharedAll = false;
+  function bars(box, items, color){
+    box.textContent = "";
+    if (!items.length) { box.appendChild(el("p", "empty", "Brak wydatków.")); return; }
+    var max = Math.max.apply(null, items.map(function(x){ return Math.max(x.v, x.plan || 0); }));
+    items.forEach(function(x){
+      var d = el("div", "grp"); var s = el("div"); s.style.display = "grid"; s.style.gridTemplateColumns = "1fr auto"; s.style.gap = "2px 10px";
+      s.appendChild(el("span", "gname", x.k));
+      var over = x.plan !== undefined && x.v > x.plan;
+      s.appendChild(el("span", "gval " + (over ? "neg" : ""), zl(x.v, true) + (x.plan !== undefined ? " / " + zl(x.plan) : "")));
+      var b = el("div", "bar"); b.style.gridColumn = "1/-1"; b.style.height = "6px";
+      var den = x.plan !== undefined ? (x.plan || x.v || 1) : (max || 1);
+      var i = el("i", over ? "over" : ""); i.style.width = Math.min(100, x.v / den * 100) + "%"; if (!over && color) i.style.background = "var(" + color + ")"; b.appendChild(i); s.appendChild(b);
+      d.appendChild(s); box.appendChild(d);
+    });
+  }
+  function entries(box, list, emptyText, mk){
+    box.textContent = "";
+    if (!list.length) { box.appendChild(el("p", "empty", emptyText)); return; }
+    list.forEach(function(t){
+      var x = mk(t), e = el("div", "entry"); e.appendChild(el("span", "when", t.date));
+      var w = el("span", "what", x.what); if (x.small) w.appendChild(el("small", "", x.small)); e.appendChild(w);
+      e.appendChild(el("span", "num", zl(t.amount, true)));
+      e.appendChild(delBtn(function(){ remove(x.del); }));
+      box.appendChild(e);
+    });
+  }
+  function renderMine(){
+    if (mineView === null) mineView = me === null ? 0 : me;
+    var seg = $("mineSeg"); seg.textContent = "";
+    S.names.forEach(function(n, k){ var b = el("button", "", n); b.type = "button"; b.setAttribute("aria-pressed", String(k === mineView)); b.onclick = function(){ mineView = k; renderMine(); }; seg.appendChild(b); });
+    var c = $("mineSummary"); c.textContent = "";
+    var p = S.persons[mineView];
+    c.appendChild(el("h2", "", "Wydane w tym miesiącu"));
+    c.appendChild(el("div", "big", zl(p.wydane)));
+    var list = S.recent.pers[mineView], sums = {}, order = [];
+    list.forEach(function(t){ var k = t.what === "Aktualizacja stanu" ? "Aktualizacja stanu" : (t.pos || "bez kategorii"); if (!(k in sums)) { sums[k] = 0; order.push(k); } sums[k] += t.amount; });
+    order.sort(function(a, b){ return sums[b] - sums[a]; });
+    bars($("mineByPos"), order.map(function(k){ return {k: k, v: sums[k]}; }), mineView ? "--p2" : "--p1");
+    $("mineByPos").parentNode.hidden = !order.length || (order.length === 1 && order[0] === "bez kategorii");
+    entries($("mineList"), list, "Brak wpisów.", function(t){ return {what: t.what || "wydatek", small: t.pos, del: {typ: "os", osoba: mineView, row: t.row}}; });
+  }
+  var posEdit = null, posAfter = null, posOwnerV = "Wspólne", posActiveV = true, posFixedV = false, prevView = "start";
+  function renderPos(){
+    var box = $("posList"); box.textContent = "";
+    var cats = S.positions.filter(function(p){ return !p.fixed; });
+    if (!cats.length) return;
+    var sections = [];
+    var wsp = cats.filter(function(p){ return p.owner === "Wspólne"; }); if (wsp.length) sections.push({t: "Wspólne", it: wsp});
+    S.names.forEach(function(n){ var it = cats.filter(function(p){ return p.owner === n; }); if (it.length) sections.push({t: n, it: it}); });
+    var bad = cats.filter(function(p){ return !p.ownerOk; }); if (bad.length) sections.push({t: "Do poprawy: nieznana osoba", it: bad});
+    sections.forEach(function(sec){
+      box.appendChild(el("div", "pos-group", sec.t));
+      var l = el("div", "pos-list");
+      sec.it.forEach(function(p){
+        var b = el("button", "pos-item" + (p.active ? "" : " off")); b.type = "button";
+        var t = el("span", "", p.name); t.appendChild(el("small", "", (p.active ? "" : "wyłączona"))); b.appendChild(t);
+        b.appendChild(el("span", "sub", "Zmień ›"));
+        b.onclick = function(){ openPos(p, null, null); };
+        l.appendChild(b);
+      });
+      box.appendChild(l);
+    });
+  }
+  var posFixedOnly = false;
+  function openPos(p, owner, after, fixedDefault, lockOwner, fixedOnly){
+    posEdit = p; posAfter = after; posFixedOnly = !!fixedOnly;
+    $("posOwnerField").hidden = !!lockOwner;
+    $("posTitle").textContent = fixedOnly ? (p ? "Zmień koszt stały" : "Nowy koszt stały") : p ? "Zmień kategorię" : lockOwner ? (owner === "Wspólne" ? "Nowa kategoria wspólna" : "Nowa kategoria: " + owner) : "Nowa kategoria";
+    $("posName").value = p ? p.name : "";
+    posOwnerV = p ? (p.ownerOk ? p.owner : "Wspólne") : (owner || "Wspólne");
+    posActiveV = p ? p.active : true;
+    $("posFixed").value = p && p.fixed ? p.fixed : "";
+    posFixedV = !!fixedOnly;
+    $("posActive").hidden = !p; $("posDel").hidden = !p;
+    $("posDel").classList.remove("armed"); $("posDel").textContent = "Usuń kategorię";
+    drawPosForm();
+    $("posSheet").classList.add("on");
+    if (!p) setTimeout(function(){ $("posName").focus(); }, 50);
+  }
+  function drawPosForm(){
+    chips($("posOwner"), ["Wspólne"].concat(S.names), posOwnerV, function(n){ posOwnerV = n; drawPosForm(); });
+    tickBtn($("posFixedTick"), "Stały koszt", posFixedV, "");
+    $("posFixedField").hidden = !posFixedV;
+    $("posFixedTick").hidden = true;
+    tickBtn($("posActive"), "Aktywna", posActiveV, "");
+  }
+  function closePos(){ $("posSheet").classList.remove("on"); }
+  $("posFixedTick").onclick = function(){ posFixedV = !posFixedV; drawPosForm(); if (posFixedV) $("posFixed").focus(); };
+  $("posActive").onclick = function(){ posActiveV = !posActiveV; drawPosForm(); };
+  $("posCancel").onclick = closePos;
+  $("posSheet").onclick = function(e){ if (e.target === $("posSheet")) closePos(); };
+  $("posSave").onclick = function(){
+    var name = $("posName").value.trim(); if (!name) { toast("Wpisz nazwę kategorii.", true); $("posName").focus(); return; }
+    var kw = posFixedV ? $("posFixed").value.trim() : "";
+    if (posFixedV && !(Number(kw.replace(/\s/g, "").replace(",", ".")) > 0)) { toast("Wpisz kwotę stałego kosztu.", true); $("posFixed").focus(); return; }
+    var dup = S.positions.some(function(p){ return (!posEdit || p.row !== posEdit.row) && p.name.toLowerCase() === name.toLowerCase(); });
+    if (dup) { toast("Kategoria „" + name + "” już istnieje.", true); $("posName").focus(); return; }
+    var after = posAfter, isNew = !posEdit;
+    closePos();
+    call("zapiszPozycje", {row: posEdit ? posEdit.row : null, nazwa: name, kwota: kw, czyje: posOwnerV, aktywna: posActiveV, miesiac: month}, isNew ? "Dodano kategorię" : "Zapisano kategorię").then(function(){
+      if (after === "shared" && posOwnerV === "Wspólne") { pos = name; renderAdd(); }
+      if (after === "mine" && posOwnerV === S.names[mineWho]) { minePos = name; renderAdd(); }
+    });
+  };
+  $("posDel").onclick = function(){
+    var b = $("posDel");
+    if (!b.classList.contains("armed")) { b.classList.add("armed"); b.textContent = "Na pewno usunąć? Stuknij jeszcze raz"; return; }
+    var row = posEdit.row; closePos(); call("usunPozycje", {row: row, miesiac: month}, "Usunięto kategorię");
+  };
+  $("posNew").onclick = function(){ openPos(null, "Wspólne", null); };
+  $("posBack").onclick = function(){ show(prevView || "start"); };
+  document.querySelectorAll("[data-open-pos]").forEach(function(b){ b.onclick = function(){ prevView = view; show("pos"); }; });
+  function renderSettle(){
+    var r = $("settleRes"); r.textContent = "";
+    if (S.settle.amount) r.appendChild(el("div", "sub", "Do oddania"));
+    r.appendChild(el("div", "big", S.settle.text));
+    if (S.settle.amount) r.appendChild(el("div", "big num", zl(S.settle.amount, true)));
+    var l = $("settleList"); l.textContent = "";
+    $("settleListCard").hidden = !S.settle.list.length;
+    S.settle.list.forEach(function(x){
+      var e = el("div", "rz-entry" + (x.paid ? " paid" : ""));
+      var w = el("span", "what", x.a ? S.settle.dirs[0] : S.settle.dirs[1]); if (x.note) w.appendChild(el("small", "", " · " + x.note)); e.appendChild(w);
+      e.appendChild(el("span", "num", zl(x.a || x.b, true)));
+      var t = el("button", "mini", "✓"); t.setAttribute("aria-label", x.paid ? "Odznacz oddane" : "Zaznacz jako oddane"); t.setAttribute("aria-pressed", String(x.paid));
+      t.onclick = function(){ call("ustawOddane", {row: x.row, oddane: !x.paid, miesiac: month}, x.paid ? "Odznaczono" : "Oddane ✓"); }; e.appendChild(t);
+      e.appendChild(delBtn(function(){ remove({typ: "rz", row: x.row}); }));
+      l.appendChild(e);
+    });
+  }
+
+  function renderFixed(){
+    var fx = S.positions.filter(function(p){ return p.fixed > 0; });
+    var on = fx.filter(function(p){ return p.active; });
+    var own = function(p){ return p.ownerOk ? p.owner : "Wspólne"; };
+    var sum = function(o){ return on.filter(function(p){ return own(p) === o; }).reduce(function(a, p){ return a + p.month; }, 0); };
+    var c = $("fixedSum"); c.textContent = "";
+    c.appendChild(el("h2", "", "Koszty stałe – " + S.monthName.toLowerCase()));
+    c.appendChild(el("div", "big", zl(on.reduce(function(a, p){ return a + p.month; }, 0), true)));
+    var g = el("div", "fx-sum");
+    ["Wspólne"].concat(S.names).forEach(function(o){ var d = el("div"); d.appendChild(el("span", "sub", o)); d.appendChild(el("b", "", zl(sum(o), true))); g.appendChild(d); });
+    c.appendChild(g);
+    var box = $("fixedList"); box.textContent = "";
+    ["Wspólne"].concat(S.names).forEach(function(o){
+      var it = fx.filter(function(p){ return own(p) === o; });
+      if (!it.length) return;
+      box.appendChild(el("div", "pos-group", o));
+      var l = el("div", "pos-list");
+      it.forEach(function(p){
+        var r = el("div", "fx-row" + (p.active ? "" : " off"));
+        var nb = el("button", "fx-name"); nb.type = "button";
+        var t = el("span", "", p.name + " ›");
+        var note = !p.active ? "wyłączona" : (Math.abs(p.month - p.fixed) >= 0.005 ? "zwykle " + zl(p.fixed, true) : "");
+        if (note) t.appendChild(el("small", "", note));
+        nb.appendChild(t); nb.onclick = function(){ openPos(p, null, null, true, false, true); }; r.appendChild(nb);
+        if (p.active) {
+          var inp = el("input", "fx-in num" + (Math.abs(p.month - p.fixed) >= 0.005 ? " changed" : "")); inp.inputMode = "decimal"; inp.value = String(p.month).replace(".", ","); inp.setAttribute("aria-label", "Kwota w tym miesiącu: " + p.name);
+          var save = function(){
+            var v = inp.value.trim(); var n = Number(v.replace(/\s/g, "").replace(",", "."));
+            if (v === "" || !isFinite(n) || n < 0) { inp.value = String(p.month).replace(".", ","); toast("Wpisz kwotę.", true); return; }
+            if (Math.abs(n - p.month) < 0.005) return;
+            call("ustawKwoteMiesiaca", {nazwa: p.name, kwota: n, miesiac: month}, Math.abs(n - p.fixed) < 0.005 ? "Przywrócono zwykłą kwotę" : "Zmieniono tylko w " + ["styczniu","lutym","marcu","kwietniu","maju","czerwcu","lipcu","sierpniu","wrześniu","październiku","listopadzie","grudniu"][month - 1]);
+          };
+          var ok = el("button", "fx-ok", "Zapisz"); ok.type = "button"; ok.hidden = true;
+          var lock = false, go = function(){ if (lock) return; lock = true; ok.hidden = true; save(); setTimeout(function(){ lock = false; }, 400); };
+          inp.oninput = function(){ ok.hidden = false; r.classList.add("dirty"); };
+          inp.onkeydown = function(e){ if (e.key === "Enter") { e.preventDefault(); go(); } };
+          inp.onblur = function(){ if (!ok.hidden) setTimeout(go, 150); };
+          ok.onpointerdown = function(e){ e.preventDefault(); };
+          ok.onclick = go;
+          var wrap = el("div", "fx-edit"); wrap.appendChild(inp); wrap.appendChild(ok);
+          r.appendChild(wrap); r.appendChild(el("span", "sub", "zł"));
+        } else r.appendChild(el("span", "num sub", zl(p.fixed, true)));
+        l.appendChild(r);
+      });
+      box.appendChild(l);
+    });
+  }
+
+  // --- akcje ---
+  function delBtn(onDelete){
+    var b = el("button", "x", "×"); b.type = "button"; b.setAttribute("aria-label", "Usuń wpis");
+    b.onclick = function(){
+      if (b.classList.contains("armed")) { onDelete(); return; }
+      b.classList.add("armed"); b.textContent = "Usuń?";
+      setTimeout(function(){ b.classList.remove("armed"); b.textContent = "×"; }, 3000);
+    };
+    return b;
+  }
+  function call(fn, arg, ok){ if (busy) return Promise.resolve(); busy = true; document.body.classList.add("loading"); return api(fn, arg).then(function(s){ set(s); if (ok) toast(ok); return true; }).catch(function(e){ fail(e); return false; }); }
+  function remove(d){ d.miesiac = month; call("usunWpis", d, "Usunięto"); }
+  function today(){ var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  function amount(){ var v = $("amt").value.replace(/\s/g, "").replace(",", "."); var n = Number(v); return isFinite(n) && n > 0 ? n : 0; }
+
+  $("saveBtn").onclick = function(){
+    var a = amount(); if (!a) { toast("Wpisz kwotę.", true); $("amt").focus(); return; }
+    var date = $("date").value || today(), desc = $("desc").value.trim();
+    var m = Number(date.slice(5, 7));
+    var done = function(pr){ pr.then(function(ok){ if (ok) { $("amt").value = ""; $("desc").value = ""; show(addFrom || "start"); } }); };
+    if (kind === "shared") { if (!pos) { toast(varList("Wspólne").length ? "Wybierz kategorię." : "Najpierw dodaj kategorię.", true); return; } done(call("dodajWydatek", {data: date, pozycja: pos, kwota: a, opis: desc, miesiac: m}, "Zapisano wydatek")); }
+    else if (kind === "mine") { done(call("dodajOsobisty", {osoba: mineWho, data: date, pozycja: minePos, kwota: a, opis: desc, miesiac: m}, "Zapisano wydatek")); }
+    else { done(call("dodajRozliczenie", {kierunek: dir, kwota: a, opis: desc, miesiac: month}, "Zapisano rozliczenie")); }
+  };
+  document.querySelectorAll(".seg button").forEach(function(b){ b.onclick = function(){ kind = b.dataset.kind; if (kind === "mine" && me !== null) mineWho = me; renderAdd(); }; });
+  $("paySave").onclick = function(){ call("zapiszWyplaty", {miesiac: month, c: $("pay1").value, d: $("pay2").value, e: $("payE").value}, "Zapisano wypłaty"); };
+  $("tick1").onclick = function(){ if (S.pay.e === "") { toast("Najpierw wpisz wpłatę na wspólne konto.", true); return; } call("ustawPrzelew", {miesiac: month, osoba: 0, wszedl: !S.pay.t1}, S.pay.t1 ? "Odznaczono" : "Przelew wykonany ✓"); };
+  $("tick2").onclick = function(){ if (S.pay.e === "") { toast("Najpierw wpisz wpłatę na wspólne konto.", true); return; } call("ustawPrzelew", {miesiac: month, osoba: 1, wszedl: !S.pay.t2}, S.pay.t2 ? "Odznaczono" : "Przelew wykonany ✓"); };
+  function openAdd(k){ kind = k; addFrom = view; show("add"); }
+  var addFrom = "start";
+  $("addBack").onclick = function(){ show(addFrom || "start"); };
+  $("settleAdd").onclick = function(){ openAdd("settle"); };
+  function balDate(){ var t = new Date(); return (t.getFullYear() === S.year && t.getMonth() + 1 === month) ? today() : S.year + "-" + String(month).padStart(2, "0") + "-" + String(new Date(S.year, month, 0).getDate()).padStart(2, "0"); }
+  function balDiff(){ var v = $("balIn").value.trim(); var n = Number(v.replace(/\s/g, "").replace(",", ".")); return v === "" || !isFinite(n) ? null : Math.round((S.persons[mineView].masz - n) * 100) / 100; }
+  function balInfo(){
+    var d = balDiff(), dt = balDate().split("-");
+    $("balInfo").textContent = d === null ? "" : d === 0 ? "Stan się zgadza." : (d > 0 ? "Zapisze wydatek " + zl(d, true) : "Zapisze " + zl(-d, true) + " więcej (na plus)") + " z datą " + dt[2] + "." + dt[1] + ".";
+  }
+  $("balBtn").onclick = function(){
+    var p = S.persons[mineView];
+    $("balTitle").textContent = "Aktualizuj stan: " + p.name;
+    $("balNow").textContent = zl(p.masz, true); $("balIn").value = ""; balInfo();
+    $("balSheet").classList.add("on"); setTimeout(function(){ $("balIn").focus(); }, 50);
+  };
+  $("balIn").oninput = balInfo;
+  $("balCancel").onclick = function(){ $("balSheet").classList.remove("on"); };
+  $("balSheet").onclick = function(e){ if (e.target === $("balSheet")) $("balSheet").classList.remove("on"); };
+  $("balSave").onclick = function(){
+    var d = balDiff();
+    if (d === null) { toast("Wpisz, ile masz.", true); $("balIn").focus(); return; }
+    if (d === 0) { toast("Stan się zgadza – nic nie zapisano.", true); return; }
+    $("balSheet").classList.remove("on");
+    call("aktualizujStan", {osoba: mineView, stan: $("balIn").value, data: balDate(), miesiac: month}, "Zaktualizowano stan");
+  };
+  $("mineAdd").onclick = function(){ mineWho = mineView === null ? (me === null ? 0 : me) : mineView; openAdd("mine"); };
+  $("fixedAdd").onclick = function(){ openPos(null, "Wspólne", null, true, false, true); };
+  // automatyczne odświeżenie po powrocie do aplikacji (np. gdy druga osoba coś dopisała)
+  var lastLoad = Date.now();
+  document.addEventListener("visibilitychange", function(){
+    if (document.visibilityState !== "visible" || busy || Date.now() - lastLoad < 5000) return;
+    var ae = document.activeElement; if (ae && ae.tagName === "INPUT") return;
+    if (document.querySelector(".sheet-bg.on")) return;
+    lastLoad = Date.now(); load(month);
+  });
+  $("payAlert").onclick = function(){ show("pay"); };
+  $("prev").onclick = function(){ if (month > 1) load(month - 1); };
+  $("next").onclick = function(){ if (month < 12) load(month + 1); };
+
+  function show(v){
+    if (v === "refresh") { load(month).then(function(){ toast("Odświeżono"); }); return; }
+    view = v;
+    ["start", "add", "pay", "settle", "mine", "pos", "fixed"].forEach(function(x){ $("v-" + x).hidden = x !== v; });
+    var cur = v === "add" ? addFrom : v === "pos" ? prevView : v;
+    document.querySelectorAll(".tab").forEach(function(t){ if (t.dataset.view === cur) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current"); });
+    if (S) render();
+    window.scrollTo(0, 0);
+    if (v === "add") $("date").value = $("date").value || today();
+  }
+  document.querySelectorAll(".tab").forEach(function(t){ t.onclick = function(){ show(t.dataset.view); }; });
+
+  function askWho(){
+    var box = $("whoPick"); box.textContent = "";
+    (S ? S.names : ["Osoba 1", "Osoba 2"]).forEach(function(n, k){
+      var b = el("button"); b.appendChild(el("span", "dot " + (k ? "d2" : "d1"))); b.appendChild(document.createTextNode(n));
+      b.onclick = function(){ me = k; mineWho = k; mineView = k; store("budzet_ja", String(k)); $("whoSheet").classList.remove("on"); render(); };
+      box.appendChild(b);
+    });
+    $("whoSheet").classList.add("on");
+  }
+  $("whoBtn").onclick = askWho;
+
+  if (me !== null) mineWho = me;
+  load(month).then(function(){ if (me === null) askWho(); });
+})();
+</script>
+</body>
+</html>
