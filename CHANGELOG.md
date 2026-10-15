@@ -3,6 +3,14 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.1.0
+- Dane w bazie Firebase Firestore (projekt budzet-domowy-a58aee-368b8, region Warszawa) zamiast arkusza Google.
+- Zapis widoczny od razu i działa bez internetu (dośle się po połączeniu).
+- Zmiany drugiej osoby pojawiają się na żywo (ok. 0,3 s).
+- Przy pierwszym otwarciu dane przenoszą się z arkusza do bazy automatycznie (jednorazowo).
+- Dostęp jak dotąd: tajny klucz w linku (reguły bazy: firestore.rules).
+- Biblioteka Firebase budowana lokalnie: build/ → firebase.js (`npm run build`).
+
 ## 1.0.4
 - Numer wersji na dole ekranu Start.
 - Samoaktualizacja: po wdrożeniu nowej wersji aplikacja sama się przeładowuje.

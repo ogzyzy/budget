@@ -228,7 +228,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.0.4</p>
+    <p class="wersja">wersja 1.1.0</p>
   </section>
 
   <!-- DODAJ -->
@@ -330,6 +330,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
 <div class="sheet-bg" id="whoSheet"><div class="sheet"><h3>Kim jesteś?</h3><p class="sub">Zapamiętam to na tym telefonie.</p><div class="who-pick" id="whoPick"></div></div></div>
 
 <!--PREVIEW-->
+<script src="firebase.js"></script>
 <script>
 /* Logika.gs – kopia 1:1 z projektu Apps Script (obliczenia budżetu) */
 /**
@@ -497,7 +498,7 @@ function obliczStan(raw, m) {
   var me = (function(){ var v = store("budzet_ja"); return v === "0" || v === "1" ? Number(v) : null; })();
 
   // --- samoaktualizacja: telefon potrafi trzymać starą stronę w pamięci; gdy na serwerze jest nowsza, przeładuj ---
-  var APP_V = "1.0.4";
+  var APP_V = "1.1.0";
   (function(){
     if (!window.fetch || location.protocol === "file:") return;
     fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
@@ -526,31 +527,140 @@ function obliczStan(raw, m) {
       .then(function(j){ if (!j || !j.ok) throw new Error((j && j.error) || "Coś poszło nie tak."); return j.data; });
   }
   function toast(msg, err){ var t = $("toast"); t.textContent = msg; t.className = "toast on" + (err ? " err" : ""); clearTimeout(toast.t); toast.t = setTimeout(function(){ t.className = "toast"; }, 2200); }
-  // --- dane: kopia arkusza (RAW) trzymana na telefonie, stan liczony tu (Logika.gs) ---
-  // Otwarcie i zmiana miesiąca działają od razu z RAW; świeże dane dociągamy w tle.
-  // Proste zapisy pokazujemy natychmiast i wysyłamy w tle (kolejka); po błędzie zmiana się cofa.
-  var RAW = null, gen = 0, queue = Promise.resolve(), pending = 0;
+  // --- dane: baza Firestore, ścieżka budzety/{KEY} (tajny klucz z linku) ---
+  // Firestore trzyma kopię na telefonie (działa też bez internetu): zapis widać od razu,
+  // do bazy idzie w tle, a zmiany drugiej osoby przychodzą na żywo (onSnapshot).
+  // Stan liczy Logika.gs z RAW – tego samego kształtu co dawniej czytany arkusz.
+  var FBC = { apiKey: "AIzaSyCBzyMXraRz_JF-0pt7CyKJKDA5UlwsVJ4", authDomain: "budzet-domowy-a58aee-368b8.firebaseapp.com",
+              projectId: "budzet-domowy-a58aee-368b8", appId: "1:350853075809:web:61df616a621e8567e8ab20" };
+  var KOLEKCJE = ["pozycje", "tx", "osobiste", "wyplaty", "rozliczenia"];
+  var db = null, RAW = null, IDS = null, docs = { root: undefined }, pendingCols = {}, readyRes, ready = new Promise(function(r){ readyRes = r; });
+  var ZAPAS = 3; // puste wiersze na końcu tabel – tam lokalne operacje dopisują nowe wpisy
   function revive(k, v){ return v && v.$d ? new Date(v.$d[0], v.$d[1], v.$d[2], v.$d[3] || 12, v.$d[4] || 0) : v; }
   function freeze(k, v){ return this[k] instanceof Date ? { $d: [this[k].getFullYear(), this[k].getMonth(), this[k].getDate(), this[k].getHours(), this[k].getMinutes()] } : v; }
   function copyRaw(r){ return JSON.parse(JSON.stringify(r, freeze), revive); }
-  (function(){ try { var c = store("budzet_raw"); if (c) RAW = JSON.parse(c, revive); } catch(e){ RAW = null; } })();
-  function keepRaw(r){ RAW = r; try { store("budzet_raw", JSON.stringify(r, freeze)); } catch(e){} }
-  function rawApi(fn, arg){ return api(fn, arg, 2).then(function(d){ return JSON.parse(JSON.stringify(d), revive); }); }
+  function same(a, b){ return JSON.stringify(a, freeze) === JSON.stringify(b, freeze); }
   function show_(m){ set(obliczStan(RAW, m)); }
   function setRefreshing(on){ document.body.classList.toggle("refreshing", !!on); }
-  function refresh(){
-    var g = ++gen; setRefreshing(true);
-    return rawApi("pobierzStan", month).then(function(r){ if (g !== gen || pending) return; keepRaw(r); setRefreshing(false); show_(month); })
-      .catch(function(e){ if (g !== gen) return; setRefreshing(false); if (S) toast("Nie udało się odświeżyć – pokazuję ostatnie dane.", true); else fail(e); });
+  function val(v){ return v === undefined || v === null ? "" : (typeof v.toDate === "function" ? v.toDate() : v); }
+  function idOf(x){ return x.id; }
+  function byT(a, b){ return (a.d.t || 0) - (b.d.t || 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); }
+  function pad(rows, n, blank){ for (var i = 0; i < ZAPAS; i++) rows.push(blank()); return rows; }
+  function blank4(){ return ["", "", "", ""]; }
+  function toRaw(){
+    var r = docs.root || {};
+    var poz = docs.pozycje.slice().sort(function(a, b){ return (a.d.kol || 0) - (b.d.kol || 0) || (a.id < b.id ? -1 : 1); });
+    var tx = docs.tx.slice().sort(byT), os = docs.osobiste.slice().sort(byT), rz = docs.rozliczenia.slice().sort(byT);
+    var wyp = {}; docs.wyplaty.forEach(function(x){ wyp[x.id] = x.d; });
+    var groups = (r.groups || []).map(val).slice(0, 12); while (groups.length < 12) groups.push("");
+    var raw = { names: [val((r.names || [])[0]), val((r.names || [])[1])], year: val(r.year), start: val(r.start), groups: groups,
+      sk: poz.map(function(x){ return [val(x.d.nazwa), val(x.d.grupa), val(x.d.kwota), val(x.d.czyje) || "Wspólne", val(x.d.aktywna)]; }),
+      plan: poz.map(function(x){ var p = (x.d.plan || []).slice(0, 12).map(val); while (p.length < 12) p.push(""); return p; }),
+      tx: tx.map(function(x){ return [val(x.d.data), val(x.d.pozycja), val(x.d.kwota), val(x.d.opis)]; }),
+      pay: [], pers: [[], []], rz: rz.map(function(x){ return [val(x.d.a), val(x.d.b), val(x.d.oddane), val(x.d.opis)]; }) };
+    for (var m = 1; m <= 12; m++) { var w = wyp[String(m)] || {}; raw.pay.push([val(w.c), val(w.d), val(w.e), val(w.t1), val(w.t2)]); }
+    var ids = { sk: poz.map(idOf), tx: tx.map(idOf), pers: [[], []], rz: rz.map(idOf) };
+    os.forEach(function(x){ var k = Number(x.d.osoba) === 1 ? 1 : 0; raw.pers[k].push([val(x.d.data), val(x.d.opis), val(x.d.kwota), val(x.d.pozycja)]); ids.pers[k].push(x.id); });
+    pad(raw.sk, ZAPAS, function(){ return ["", "", "", "Wspólne", "✓"]; }); pad(raw.plan, ZAPAS, function(){ return ["", "", "", "", "", "", "", "", "", "", "", ""]; });
+    pad(raw.tx, ZAPAS, blank4); pad(raw.pers[0], ZAPAS, blank4); pad(raw.pers[1], ZAPAS, blank4); pad(raw.rz, ZAPAS, blank4);
+    IDS = ids; return raw;
+  }
+  function rebuild(){
+    if (docs.root === undefined || KOLEKCJE.some(function(c){ return !docs[c]; })) return;
+    if (docs.root === null) return; // budżet jeszcze nie istnieje – migracja z arkusza go założy
+    RAW = toRaw(); show_(month); readyRes();
+  }
+  function startDb(){
+    if (!window.FB) return fail(new Error("Nie wczytała się biblioteka bazy danych. Sprawdź internet i spróbuj ponownie."));
+    var app = FB.initializeApp(FBC);
+    try { db = FB.initializeFirestore(app, { localCache: FB.persistentLocalCache({ tabManager: FB.persistentMultipleTabManager() }) }); }
+    catch(e){ db = FB.initializeFirestore(app, { localCache: FB.memoryLocalCache() }); }
+    var onErr = function(e){ fail(new Error("Baza danych odrzuciła połączenie: " + (e && e.message || e))); };
+    FB.onSnapshot(FB.doc(db, "budzety", KEY), function(snap){
+      docs.root = snap.exists() ? snap.data() : null;
+      if (!snap.exists() && !snap.metadata.fromCache) migrate();
+      rebuild();
+    }, onErr);
+    KOLEKCJE.forEach(function(c){
+      FB.onSnapshot(FB.collection(db, "budzety", KEY, c), { includeMetadataChanges: true }, function(snap){
+        docs[c] = snap.docs.map(function(d){ return { id: d.id, d: d.data() }; });
+        pendingCols[c] = snap.metadata.hasPendingWrites;
+        setRefreshing(KOLEKCJE.some(function(x){ return pendingCols[x]; }));
+        rebuild();
+      }, onErr);
+    });
   }
   function load(m){
-    if (RAW) { show_(m); return pending ? Promise.resolve() : refresh(); }
-    document.body.classList.add("loading"); month = m;
-    var g = ++gen;
-    return rawApi("pobierzStan", m).then(function(r){ if (g !== gen) return; keepRaw(r); show_(m); }).catch(fail);
+    month = m;
+    if (RAW) { show_(m); return Promise.resolve(); }
+    document.body.classList.add("loading");
+    if (!db) { if (!KEY) { fail(new Error("Brak klucza – otwórz aplikację z linku, który dostałeś.")); return ready; } startDb(); }
+    return ready;
   }
   function set(s){ S = s; month = s.month; document.body.classList.remove("loading"); busy = false; render(); }
   function fail(e){ document.body.classList.remove("loading"); busy = false; var msg = (e && e.message) || "Coś poszło nie tak."; if (!S) { $("bladTxt").textContent = msg; $("blad").className = "blad on"; } else toast(msg, true); }
+
+  // --- zapis: lokalna operacja na kopii RAW, potem różnice → jedna paczka zapisów do bazy ---
+  var lastT = 0;
+  function tnow(){ var t = Date.now(); lastT = t > lastT ? t : lastT + 1; return lastT; }
+  function nid(){ return tnow().toString(36) + Math.random().toString(36).slice(2, 8); }
+  function isBlank4(r){ return r.slice(0, 4).every(function(x){ return x === "" || x === null; }); }
+  function ops(prev, next){
+    var out = [], base = ["budzety", KEY];
+    var col = function(name, oldRows, newRows, ids, blankFn, fields, extra){
+      for (var i = 0; i < newRows.length; i++) {
+        var id = ids[i], o = oldRows[i], n = newRows[i];
+        if (id && blankFn(n)) out.push({ t: "del", p: base.concat([name, id]) });
+        else if (id && !same(o, n)) out.push({ t: "set", p: base.concat([name, id]), d: fields(n, i), merge: true });
+        else if (!id && !blankFn(n)) { var d = fields(n, i); d.t = tnow(); if (extra) extra(d, i); out.push({ t: "set", p: base.concat([name, nid()]), d: d }); }
+      }
+    };
+    col("tx", prev.tx, next.tx, IDS.tx, isBlank4, function(r){ return { data: r[0], pozycja: r[1], kwota: r[2], opis: r[3] }; });
+    [0, 1].forEach(function(k){ col("osobiste", prev.pers[k], next.pers[k], IDS.pers[k], isBlank4, function(r){ return { osoba: k, data: r[0], opis: r[1], kwota: r[2], pozycja: r[3] }; }); });
+    col("rozliczenia", prev.rz, next.rz, IDS.rz, isBlank4, function(r){ return { a: r[0], b: r[1], oddane: r[2], opis: r[3] }; });
+    var maxKol = 0; (docs.pozycje || []).forEach(function(x){ maxKol = Math.max(maxKol, x.d.kol || 0); });
+    var skRows = next.sk.map(function(r, i){ return r.concat([next.plan[i]]); }), skOld = prev.sk.map(function(r, i){ return r.concat([prev.plan[i]]); });
+    col("pozycje", skOld, skRows, IDS.sk, function(r){ return String(r[0]).trim() === ""; },
+      function(r){ return { nazwa: r[0], grupa: r[1], kwota: r[2], czyje: r[3], aktywna: r[4], plan: r[5] }; },
+      function(d){ d.kol = ++maxKol; });
+    for (var m = 0; m < 12; m++) if (!same(prev.pay[m], next.pay[m])) { var p = next.pay[m]; out.push({ t: "set", p: base.concat(["wyplaty", String(m + 1)]), d: { c: p[0], d: p[1], e: p[2], t1: p[3], t2: p[4] }, merge: true }); }
+    if (!same(prev.groups, next.groups)) out.push({ t: "set", p: base, d: { groups: next.groups }, merge: true });
+    return out;
+  }
+  function commit(list){
+    var chunks = []; for (var i = 0; i < list.length; i += 400) chunks.push(list.slice(i, i + 400));
+    return Promise.all(chunks.map(function(ch){
+      var b = FB.writeBatch(db);
+      ch.forEach(function(o){ var ref = FB.doc.apply(null, [db].concat(o.p)); if (o.t === "del") b.delete(ref); else b.set(ref, o.d, o.merge ? { merge: true } : {}); });
+      return b.commit();
+    }));
+  }
+
+  // --- jednorazowe przeniesienie danych z arkusza Google (Apps Script) do bazy ---
+  var migrating = false;
+  function migrate(){
+    if (migrating) return; migrating = true;
+    document.body.classList.add("loading");
+    api("pobierzStan", month, 2).then(function(d){
+      var r = JSON.parse(JSON.stringify(d), revive), root = FB.doc(db, "budzety", KEY);
+      return FB.runTransaction(db, function(t){
+        return t.get(root).then(function(s){
+          if (s.exists()) return false; // druga osoba właśnie przenosi – nic nie rób
+          t.set(root, { names: r.names, year: r.year, start: r.start, groups: r.groups, zmigrowano: Date.now() });
+          return true;
+        });
+      }).then(function(first){
+        if (!first) return;
+        var list = [], base = ["budzety", KEY], t0 = Date.now();
+        r.sk.forEach(function(x, i){ if (String(x[0]).trim()) list.push({ p: base.concat(["pozycje", "p" + i]), d: { nazwa: x[0], grupa: x[1], kwota: x[2], czyje: x[3] || "Wspólne", aktywna: x[4], plan: r.plan[i], kol: i } }); });
+        r.tx.forEach(function(x, i){ if (!isBlank4(x)) list.push({ p: base.concat(["tx", "t" + i]), d: { data: x[0], pozycja: x[1], kwota: x[2], opis: x[3], t: t0 + i } }); });
+        [0, 1].forEach(function(k){ r.pers[k].forEach(function(x, i){ if (!isBlank4(x)) list.push({ p: base.concat(["osobiste", "o" + k + "_" + i]), d: { osoba: k, data: x[0], opis: x[1], kwota: x[2], pozycja: x[3], t: t0 + i } }); }); });
+        r.rz.forEach(function(x, i){ if (!isBlank4(x)) list.push({ p: base.concat(["rozliczenia", "r" + i]), d: { a: x[0], b: x[1], oddane: x[2], opis: x[3], t: t0 + i } }); });
+        r.pay.forEach(function(x, i){ list.push({ p: base.concat(["wyplaty", String(i + 1)]), d: { c: x[0], d: x[1], e: x[2], t1: x[3], t2: x[4] } }); });
+        return commit(list);
+      });
+    }).catch(function(e){ migrating = false; fail(new Error("Nie udało się przenieść danych z arkusza: " + ((e && e.message) || e))); });
+  }
 
   // lokalne odpowiedniki zapisów z Kod.gs (te same zasady i komunikaty)
   function kw(v){ var n = Number(String(v).replace(/\s/g, "").replace(",", ".")); if (!isFinite(n) || n <= 0) throw new Error("Kwota musi być większa od zera."); return Math.round(n * 100) / 100; }
@@ -632,23 +742,15 @@ function obliczStan(raw, m) {
   };
   window.BUDZET_TEST = { LOCAL: LOCAL }; // do testów zgodności z serwerem
   function call(fn, arg, ok){
-    var m = arg && arg.miesiac ? Number(arg.miesiac) : month;
-    if (RAW && LOCAL[fn]) {
-      var before = RAW, next = copyRaw(RAW);
-      try { LOCAL[fn](next, arg); } catch(e){ toast(e.message, true); return Promise.resolve(false); }
-      gen++; setRefreshing(true); pending++;
-      RAW = next; show_(m); if (ok) toast(ok);
-      queue = queue.then(function(){ return rawApi(fn, arg); }).then(function(r){
-        pending--; if (!pending) { keepRaw(r); setRefreshing(false); show_(month); }
-      }, function(e){
-        pending--; setRefreshing(pending > 0); RAW = before; keepRaw(before); show_(month);
-        toast("Nie zapisano: " + ((e && e.message) || "błąd") + " – cofnięto.", true);
-        refresh();
-      });
-      return Promise.resolve(true);
-    }
-    if (busy) return Promise.resolve(); busy = true; document.body.classList.add("loading"); gen++;
-    return queue.then(function(){ return rawApi(fn, arg); }).then(function(r){ keepRaw(r); setRefreshing(false); show_(m); if (ok) toast(ok); return true; }).catch(function(e){ setRefreshing(false); fail(e); return false; });
+    if (!RAW || !LOCAL[fn]) return Promise.resolve(false);
+    var next = copyRaw(RAW);
+    try { LOCAL[fn](next, arg); } catch(e){ toast(e.message, true); return Promise.resolve(false); }
+    var list = ops(RAW, next);
+    if (arg && arg.miesiac) month = Number(arg.miesiac);
+    if (!list.length) { show_(month); if (ok) toast(ok); return Promise.resolve(true); }
+    commit(list).catch(function(e){ toast("Nie zapisano: " + ((e && e.message) || "błąd") + " – cofnięto.", true); });
+    if (ok) toast(ok);
+    return Promise.resolve(true);
   }
 
   // --- render ---
@@ -954,7 +1056,7 @@ function obliczStan(raw, m) {
     };
     return b;
   }
-  window.BUDZET_TEST.call = call; window.BUDZET_TEST.raw = function(){ return RAW; }; window.BUDZET_TEST.pending = function(){ return pending; };
+  window.BUDZET_TEST.call = call; window.BUDZET_TEST.raw = function(){ return RAW; }; window.BUDZET_TEST.pending = function(){ return document.body.classList.contains("refreshing") ? 1 : 0; };
   function remove(d){ d.miesiac = month; call("usunWpis", d, "Usunięto"); }
   function today(){ var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
   function amount(){ var v = $("amt").value.replace(/\s/g, "").replace(",", "."); var n = Number(v); return isFinite(n) && n > 0 ? n : 0; }

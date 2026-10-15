@@ -1,0 +1,15 @@
+rules_version = '2';
+// Bez logowania: dostęp ma tylko ten, kto zna tajny klucz budżetu (część ścieżki).
+// Listowania budżetów nie ma, więc klucza nie da się podejrzeć ani zgadnąć.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /budzety/{klucz} {
+      allow get, create, update: if klucz.size() >= 24;
+      allow list, delete: if false;
+      match /{kolekcja}/{doc} {
+        allow read, write: if klucz.size() >= 24
+          && kolekcja in ['pozycje', 'tx', 'osobiste', 'wyplaty', 'rozliczenia'];
+      }
+    }
+  }
+}

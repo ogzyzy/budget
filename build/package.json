@@ -1,0 +1,8 @@
+{
+  "name": "budzet-firebase-bundle",
+  "private": true,
+  "description": "Buduje ../firebase.js (Firestore z pamięcią offline) z oficjalnej paczki npm.",
+  "scripts": { "build": "esbuild wejscie.js --bundle --minify --format=iife --target=es2017,safari13 --outfile=../firebase.js" },
+  "dependencies": { "firebase": "10.12.2" },
+  "devDependencies": { "esbuild": "0.21.5" }
+}
