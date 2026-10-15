@@ -234,7 +234,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.4.1</p>
+    <p class="wersja">wersja 1.4.2</p>
   </section>
 
   <!-- DODAJ -->
@@ -519,17 +519,29 @@ function obliczStan(raw, m) {
     rememberMe(v); return Number(v);
   })();
 
-  // --- samoaktualizacja: telefon potrafi trzymać starą stronę w pamięci; gdy na serwerze jest nowsza, przeładuj ---
-  var APP_V = "1.4.1";
-  (function(){
+  // --- samoaktualizacja: telefon trzyma aplikację w tle i wznawia starą wersję bez przeładowania,
+  // więc sprawdzamy przy starcie i przy każdym powrocie do aplikacji (najwyżej raz na 10 s) ---
+  var APP_V = "1.4.2";
+  function checkUpdate(){
     if (!window.fetch || location.protocol === "file:") return;
+    if (checkUpdate.last && Date.now() - checkUpdate.last < 10000) return;
+    checkUpdate.last = Date.now();
     fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
       if (!j || !j.v || j.v === APP_V) return;
       try { if (sessionStorage.getItem("budzet_upd") === j.v) return; sessionStorage.setItem("budzet_upd", j.v); } catch(e){ return; }
-      var q = location.search.replace(/[?&]_v=[^&]*/g, "").replace(/^&/, "?");
-      location.replace(location.pathname + (q ? q + "&" : "?") + "_v=" + encodeURIComponent(j.v));
+      var go = function(){
+        // nie przerywaj pisania ani otwartego okna – spróbuj za chwilę
+        var a = document.activeElement, busyUi = (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA")) || document.querySelector(".sheet-bg.on");
+        if (busyUi) { setTimeout(go, 3000); return; }
+        var q = location.search.replace(/[?&]_v=[^&]*/g, "").replace(/^&/, "?");
+        location.replace(location.pathname + (q ? q + "&" : "?") + "_v=" + encodeURIComponent(j.v));
+      };
+      go();
     }).catch(function(){});
-  })();
+  }
+  checkUpdate();
+  document.addEventListener("visibilitychange", function(){ if (document.visibilityState === "visible") checkUpdate(); });
+  window.addEventListener("pageshow", function(e){ if (e.persisted) { checkUpdate.last = 0; checkUpdate(); } });
 
   // --- połączenie z arkuszem przez Api.gs (albo podgląd na przykładowych danych) ---
   var API_URL = "https://script.google.com/macros/s/AKfycbybA3YrD-JsK8jaTGtfccQLsvROY0Kz4BocZA51taOReVi1gcNlTcZ4076561S-ERBBMQ/exec";

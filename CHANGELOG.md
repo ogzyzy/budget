@@ -3,6 +3,11 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.4.2
+- Aktualizacja aplikacji sprawdzana także przy każdym powrocie do niej (telefon trzymał w tle starą wersję
+  i nowe poprawki nie docierały); przeładowanie czeka, aż skończysz pisać / zamkniesz okno.
+- Testy zmiany nazw: wydatki, korekty kwoty miesiąca i kategorie właściciela zmieniają się w bazie, innej osoby nie.
+
 ## 1.4.1
 - Ta sama nazwa kategorii może być u różnych osób (np. „Multisport” Dominika i Mileny); unikalność w obrębie
   właściciela. Zmiana nazwy, usuwanie i kwota w jednym miesiącu działają tylko na wydatkach tego właściciela.
