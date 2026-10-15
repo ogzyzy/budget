@@ -175,6 +175,7 @@ button,input,select{font:inherit;color:inherit}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.err{background:var(--over);color:#fff}
 .loading{opacity:.55;pointer-events:none}
+.wersja{text-align:center;color:var(--muted);font-size:12px;margin:24px 0 8px}
 .toast{width:max-content;max-width:calc(100vw - 32px);white-space:normal;text-align:center;box-sizing:border-box;border-radius:18px}
 body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3px;z-index:60;background:linear-gradient(90deg,transparent,var(--shared),transparent);background-size:50% 100%;background-repeat:no-repeat;animation:odsw 1s linear infinite}@keyframes odsw{from{background-position:-50% 0}to{background-position:150% 0}}
 .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:flex-end;z-index:30}
@@ -227,6 +228,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
+    <p class="wersja">wersja 1.4.0</p>
   </section>
 
   <!-- DODAJ -->
@@ -493,6 +495,18 @@ function obliczStan(raw, m) {
   function el(tag, cls, text){ var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
   function store(k, v){ try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch(e){ return null; } }
   var me = (function(){ var v = store("budzet_ja"); return v === "0" || v === "1" ? Number(v) : null; })();
+
+  // --- samoaktualizacja: telefon potrafi trzymać starą stronę w pamięci; gdy na serwerze jest nowsza, przeładuj ---
+  var APP_V = "1.4.0";
+  (function(){
+    if (!window.fetch || location.protocol === "file:") return;
+    fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
+      if (!j || !j.v || j.v === APP_V) return;
+      try { if (sessionStorage.getItem("budzet_upd") === j.v) return; sessionStorage.setItem("budzet_upd", j.v); } catch(e){ return; }
+      var q = location.search.replace(/[?&]_v=[^&]*/g, "").replace(/^&/, "?");
+      location.replace(location.pathname + (q ? q + "&" : "?") + "_v=" + encodeURIComponent(j.v));
+    }).catch(function(){});
+  })();
 
   // --- połączenie z arkuszem przez Api.gs (albo podgląd na przykładowych danych) ---
   var API_URL = "https://script.google.com/macros/s/AKfycbybA3YrD-JsK8jaTGtfccQLsvROY0Kz4BocZA51taOReVi1gcNlTcZ4076561S-ERBBMQ/exec";
