@@ -3,6 +3,12 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.2.1
+- Pisanie nie jest przerywane przez zmiany przychodzące z bazy (np. od drugiej osoby): ekran odświeża się po wyjściu z pola.
+- Ekran nie przerysowuje się, gdy baza tylko potwierdza zapis.
+- Kwoty można wpisywać z „zł”/„PLN” i spacjami (np. „29,99 zł”, „1 234,50”).
+- Pola nazwy i opisu: polska klawiatura, wielka litera na początku, enter = gotowe.
+
 ## 1.2.0
 - Koszty stałe odliczają się od konta wspólnego co miesiąc, od miesiąca startu budżetu (u nas: październik 2026 –
   miesiąc przeniesienia do bazy; można nadpisać polem startMiesiac w bazie), niezależnie od ✓ wpłat.

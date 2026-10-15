@@ -228,7 +228,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.2.0</p>
+    <p class="wersja">wersja 1.2.1</p>
   </section>
 
   <!-- DODAJ -->
@@ -252,7 +252,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
     <div id="f-settle" hidden>
       <div class="field"><span>Kto oddaje komu</span><div class="dir" id="dirBtns"></div></div>
     </div>
-    <label class="field"><span id="descLbl">Opis (opcjonalnie)</span><input id="desc" autocomplete="off" placeholder="np. Biedronka"></label>
+    <label class="field"><span id="descLbl">Opis (opcjonalnie)</span><input id="desc" type="text" lang="pl" autocomplete="off" autocapitalize="sentences" spellcheck="true" enterkeyhint="done" placeholder="np. Biedronka"></label>
     <label class="field" id="dateField"><span>Data</span><input id="date" type="date"></label>
     <button class="primary" id="saveBtn">Zapisz wydatek</button>
 
@@ -312,7 +312,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="sheet-bg" id="posSheet"><div class="sheet" role="dialog" aria-labelledby="posTitle">
   <h3 id="posTitle">Nowa kategoria</h3>
-  <label class="field"><span>Nazwa</span><input id="posName" autocomplete="off" placeholder="np. Czynsz, Netflix, Biedronka"></label>
+  <label class="field"><span>Nazwa</span><input id="posName" type="text" lang="pl" autocomplete="off" autocapitalize="sentences" autocorrect="off" spellcheck="false" enterkeyhint="done" placeholder="np. Czynsz, Netflix, Biedronka"></label>
   <div class="field" id="posOwnerField"><span>Czyja</span><div class="chips" id="posOwner"></div></div>
   <button type="button" class="tick" id="posFixedTick" style="background:var(--surface2)"></button>
   <label class="field" id="posFixedField"><span>Kwota co miesiąc</span><input id="posFixed" class="num" inputmode="decimal" placeholder="np. 99"></label>
@@ -500,7 +500,7 @@ function obliczStan(raw, m) {
   var me = (function(){ var v = store("budzet_ja"); return v === "0" || v === "1" ? Number(v) : null; })();
 
   // --- samoaktualizacja: telefon potrafi trzymać starą stronę w pamięci; gdy na serwerze jest nowsza, przeładuj ---
-  var APP_V = "1.2.0";
+  var APP_V = "1.2.1";
   (function(){
     if (!window.fetch || location.protocol === "file:") return;
     fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
@@ -575,7 +575,9 @@ function obliczStan(raw, m) {
     if (docs.root === undefined || KOLEKCJE.some(function(c){ return !docs[c]; })) return;
     if (docs.root === null) return; // budżet jeszcze nie istnieje – migracja z arkusza go założy
     if (Object.keys(waiting).some(function(c){ return waiting[c]; })) return;
-    RAW = toRaw(); show_(month); readyRes();
+    var nr = toRaw();
+    if (RAW && same(nr, RAW)) { readyRes(); return; } // samo potwierdzenie z bazy – nic się nie zmieniło, nie przerysowuj
+    RAW = nr; show_(month); readyRes();
   }
   function startDb(){
     if (!window.FB) return fail(new Error("Nie wczytała się biblioteka bazy danych. Sprawdź internet i spróbuj ponownie."));
@@ -613,7 +615,11 @@ function obliczStan(raw, m) {
     if (!db) { if (!KEY) { fail(new Error("Brak klucza – otwórz aplikację z linku, który dostałeś.")); return ready; } startDb(); }
     return ready;
   }
-  function set(s){ S = s; month = s.month; document.body.classList.remove("loading"); busy = false; render(); }
+  // Gdy ktoś pisze w polu, nie przerysowuj (zniknęłoby pole razem z klawiaturą) – zrób to po wyjściu z pola.
+  var renderLater = false;
+  function typing(){ var a = document.activeElement; return !!a && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !/^(checkbox|radio|button|submit)$/.test(a.type))); }
+  document.addEventListener("focusout", function(){ setTimeout(function(){ if (renderLater && !typing()) { renderLater = false; render(); } }, 0); });
+  function set(s){ S = s; month = s.month; document.body.classList.remove("loading"); busy = false; if (S && typing()) { renderLater = true; return; } render(); }
   function fail(e){ document.body.classList.remove("loading"); busy = false; var msg = (e && e.message) || "Coś poszło nie tak."; if (!S) { $("bladTxt").textContent = msg; $("blad").className = "blad on"; } else toast(msg, true); }
 
   // --- zapis: lokalna operacja na kopii RAW, potem różnice → jedna paczka zapisów do bazy ---
@@ -679,7 +685,7 @@ function obliczStan(raw, m) {
   }
 
   // lokalne odpowiedniki zapisów z Kod.gs (te same zasady i komunikaty)
-  function kw(v){ var n = Number(String(v).replace(/\s/g, "").replace(",", ".")); if (!isFinite(n) || n <= 0) throw new Error("Kwota musi być większa od zera."); return Math.round(n * 100) / 100; }
+  function kw(v){ var n = Number(String(v).replace(/\s|zł|zl|pln/gi, "").replace(",", ".")); if (!isFinite(n) || n <= 0) throw new Error("Kwota musi być większa od zera."); return Math.round(n * 100) / 100; }
   function dt(iso){ var p = String(iso || "").split("-"); if (p.length !== 3) return new Date(); return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]), 12, 0, 0); }
   function empty(rows){ for (var i = 0; i < rows.length; i++) if (rows[i].slice(0, 4).every(function(x){ return x === "" || x === null; })) return i; throw new Error("Tabela jest pełna – dodajcie wiersze w arkuszu."); }
   var LOCAL = {
@@ -692,7 +698,7 @@ function obliczStan(raw, m) {
     ustawOddane: function(r, d){ if (r.rz[Number(d.row)]) r.rz[Number(d.row)][2] = d.oddane ? "✓" : ""; },
     aktualizujStan: function(r, d){
       var k = Number(d.osoba) === 1 ? 1 : 0, m = Number(d.miesiac);
-      var n = Number(String(d.stan).replace(/\s/g, "").replace(",", "."));
+      var n = Number(String(d.stan).replace(/\s|zł|zl|pln/gi, "").replace(",", "."));
       if (String(d.stan).trim() === "" || !isFinite(n)) throw new Error("Wpisz, ile masz.");
       var roznica = Math.round((obliczStan(r, m).persons[k].masz - n) * 100) / 100;
       if (roznica === 0) throw new Error("Stan się zgadza – nic nie zapisano.");
@@ -703,7 +709,7 @@ function obliczStan(raw, m) {
       for (var i = 0; i < r.sk.length; i++) if (String(r.sk[i][0]).trim() === nazwa) { poz = r.sk[i]; break; }
       if (!poz) throw new Error("Nie ma kategorii „" + nazwa + "”.");
       if (poz[4] !== "✓") throw new Error("Kategoria „" + nazwa + "” jest wyłączona.");
-      var n = Number(String(d.kwota).replace(/\s/g, "").replace(",", "."));
+      var n = Number(String(d.kwota).replace(/\s|zł|zl|pln/gi, "").replace(",", "."));
       if (!isFinite(n) || n < 0) throw new Error("Wpisz kwotę.");
       var roznica = Math.round((n - (Number(poz[2]) || 0)) * 100) / 100;
       var rok = Number(r.year) || new Date().getFullYear();
@@ -766,6 +772,7 @@ function obliczStan(raw, m) {
     if (!list.length) { show_(month); if (ok) toast(ok); return Promise.resolve(true); }
     expect(list);
     commit(list).catch(function(e){ waiting = {}; rebuild(); toast("Nie zapisano: " + ((e && e.message) || "błąd") + " – cofnięto.", true); });
+    if (typing()) document.activeElement.blur(); // zapis kończy pisanie – pokaż wynik od razu
     RAW = next; show_(month); // ekran od razu; potwierdzenie z bazy (onSnapshot) tylko go uzgodni
     if (ok) toast(ok);
     return Promise.resolve(true);
@@ -980,7 +987,7 @@ function obliczStan(raw, m) {
   $("posSave").onclick = function(){
     var name = $("posName").value.trim(); if (!name) { toast("Wpisz nazwę kategorii.", true); $("posName").focus(); return; }
     var kw = posFixedV ? $("posFixed").value.trim() : "";
-    if (posFixedV && !(Number(kw.replace(/\s/g, "").replace(",", ".")) > 0)) { toast("Wpisz kwotę stałego kosztu.", true); $("posFixed").focus(); return; }
+    if (posFixedV && !(Number(kw.replace(/\s|zł|zl|pln/gi, "").replace(",", ".")) > 0)) { toast("Wpisz kwotę stałego kosztu.", true); $("posFixed").focus(); return; }
     var dup = S.positions.some(function(p){ return (!posEdit || p.row !== posEdit.row) && p.name.toLowerCase() === name.toLowerCase(); });
     if (dup) { toast("Kategoria „" + name + "” już istnieje.", true); $("posName").focus(); return; }
     var after = posAfter, isNew = !posEdit;
@@ -1043,7 +1050,7 @@ function obliczStan(raw, m) {
         if (p.active) {
           var inp = el("input", "fx-in num" + (Math.abs(p.month - p.fixed) >= 0.005 ? " changed" : "")); inp.inputMode = "decimal"; inp.value = String(p.month).replace(".", ","); inp.setAttribute("aria-label", "Kwota w tym miesiącu: " + p.name);
           var save = function(){
-            var v = inp.value.trim(); var n = Number(v.replace(/\s/g, "").replace(",", "."));
+            var v = inp.value.trim(); var n = Number(v.replace(/\s|zł|zl|pln/gi, "").replace(",", "."));
             if (v === "" || !isFinite(n) || n < 0) { inp.value = String(p.month).replace(".", ","); toast("Wpisz kwotę.", true); return; }
             if (Math.abs(n - p.month) < 0.005) return;
             call("ustawKwoteMiesiaca", {nazwa: p.name, kwota: n, miesiac: month}, Math.abs(n - p.fixed) < 0.005 ? "Przywrócono zwykłą kwotę" : "Zmieniono tylko w " + ["styczniu","lutym","marcu","kwietniu","maju","czerwcu","lipcu","sierpniu","wrześniu","październiku","listopadzie","grudniu"][month - 1]);
@@ -1077,7 +1084,7 @@ function obliczStan(raw, m) {
   window.BUDZET_TEST.call = call; window.BUDZET_TEST.raw = function(){ return RAW; }; window.BUDZET_TEST.pending = function(){ return document.body.classList.contains("refreshing") ? 1 : 0; };
   function remove(d){ d.miesiac = month; call("usunWpis", d, "Usunięto"); }
   function today(){ var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
-  function amount(){ var v = $("amt").value.replace(/\s/g, "").replace(",", "."); var n = Number(v); return isFinite(n) && n > 0 ? n : 0; }
+  function amount(){ var v = $("amt").value.replace(/\s|zł|zl|pln/gi, "").replace(",", "."); var n = Number(v); return isFinite(n) && n > 0 ? n : 0; }
 
   $("saveBtn").onclick = function(){
     var a = amount(); if (!a) { toast("Wpisz kwotę.", true); $("amt").focus(); return; }
@@ -1097,7 +1104,7 @@ function obliczStan(raw, m) {
   $("addBack").onclick = function(){ show(addFrom || "start"); };
   $("settleAdd").onclick = function(){ openAdd("settle"); };
   function balDate(){ var t = new Date(); return (t.getFullYear() === S.year && t.getMonth() + 1 === month) ? today() : S.year + "-" + String(month).padStart(2, "0") + "-" + String(new Date(S.year, month, 0).getDate()).padStart(2, "0"); }
-  function balDiff(){ var v = $("balIn").value.trim(); var n = Number(v.replace(/\s/g, "").replace(",", ".")); return v === "" || !isFinite(n) ? null : Math.round((S.persons[mineView].masz - n) * 100) / 100; }
+  function balDiff(){ var v = $("balIn").value.trim(); var n = Number(v.replace(/\s|zł|zl|pln/gi, "").replace(",", ".")); return v === "" || !isFinite(n) ? null : Math.round((S.persons[mineView].masz - n) * 100) / 100; }
   function balInfo(){
     var d = balDiff(), dt = balDate().split("-");
     $("balInfo").textContent = d === null ? "" : d === 0 ? "Stan się zgadza." : (d > 0 ? "Zapisze wydatek " + zl(d, true) : "Zapisze " + zl(-d, true) + " więcej (na plus)") + " z datą " + dt[2] + "." + dt[1] + ".";
