@@ -170,6 +170,7 @@ button,input,select{font:inherit;color:inherit}
 .tab.add .plus{width:54px;height:54px;border-radius:50%;background:var(--ink);display:grid;place-items:center;margin-top:-22px;box-shadow:0 0 0 5px var(--bg)}
 .tab.add span{color:var(--muted)}
 
+.blad{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;padding:24px;background:var(--bg)}.blad.on{display:flex}.blad div{max-width:360px;text-align:center;font:16px/1.5 var(--txt);color:var(--ink)}.blad b{display:block;font-size:20px;margin-bottom:8px}.blad p{color:var(--muted);margin:0 0 16px;word-break:break-word}.blad button{font:600 16px var(--txt);padding:12px 22px;border-radius:999px;border:0;background:var(--shared);color:#fff}
 .toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);opacity:0;background:var(--ink);color:var(--surface);padding:11px 18px;border-radius:999px;font-size:15px;transition:.25s;pointer-events:none;z-index:20;white-space:nowrap}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.err{background:var(--over);color:#fff}
@@ -303,6 +304,7 @@ button,input,select{font:inherit;color:inherit}
   </div>
 </nav>
 
+<div class="blad" id="blad"><div><b>Nie udało się wczytać budżetu</b><p id="bladTxt"></p><button type="button" onclick="location.reload()">Spróbuj ponownie</button></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="sheet-bg" id="posSheet"><div class="sheet" role="dialog" aria-labelledby="posTitle">
   <h3 id="posTitle">Nowa kategoria</h3>
@@ -346,15 +348,16 @@ button,input,select{font:inherit;color:inherit}
   function api(fn, arg){
     if (window.PODGLAD) return new Promise(function(res, rej){ setTimeout(function(){ try { res(window.PODGLAD[fn](arg)); } catch(e){ rej(e); } }, 120); });
     if (!KEY) return Promise.reject(new Error("Brak klucza – otwórz aplikację z linku, który dostałeś."));
-    return fetch(API_URL, { method: "POST", body: JSON.stringify({ k: KEY, fn: fn, arg: arg === undefined ? null : arg }) })
+    var ctl = window.AbortController ? new AbortController() : null; if (ctl) setTimeout(function(){ ctl.abort(); }, 30000);
+    return fetch(API_URL, { method: "POST", signal: ctl ? ctl.signal : undefined, body: JSON.stringify({ k: KEY, fn: fn, arg: arg === undefined ? null : arg }) })
       .then(function(r){ if (!r.ok) throw new Error("Serwer nie odpowiada (" + r.status + ")."); return r.json(); },
-            function(){ throw new Error("Brak internetu albo serwer nie odpowiada."); })
+            function(){ throw new Error("Brak internetu albo serwer nie odpowiada (30 s)."); })
       .then(function(j){ if (!j || !j.ok) throw new Error((j && j.error) || "Coś poszło nie tak."); return j.data; });
   }
   function toast(msg, err){ var t = $("toast"); t.textContent = msg; t.className = "toast on" + (err ? " err" : ""); clearTimeout(toast.t); toast.t = setTimeout(function(){ t.className = "toast"; }, 2200); }
   function load(m){ document.body.classList.add("loading"); return api("pobierzStan", m).then(set).catch(fail); }
   function set(s){ S = s; month = s.month; document.body.classList.remove("loading"); busy = false; render(); }
-  function fail(e){ document.body.classList.remove("loading"); busy = false; toast(e.message || "Coś poszło nie tak.", true); }
+  function fail(e){ document.body.classList.remove("loading"); busy = false; var msg = (e && e.message) || "Coś poszło nie tak."; if (!S) { $("bladTxt").textContent = msg; $("blad").className = "blad on"; } else toast(msg, true); }
 
   // --- render ---
   function render(){
