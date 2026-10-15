@@ -3,6 +3,13 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.4.0
+- Rozliczenia: wpisany dług nie zmienia niczyich środków; dopiero ✓ „oddane” odejmuje dłużnikowi i dodaje
+  wierzycielowi (wcześniej wierzyciel miał mniej od razu).
+- Ekran Start: karta Rozliczenia pokazuje nieoddane pozycje z opisem.
+- „Stałe”: na dole lista kategorii bez kwoty stałej – stuknięcie pozwala ustawić kwotę (nic się nie chowa).
+- Dane: połączono „YouTubePremium” (39 zł) z pustą „YouTube Premium”.
+
 ## 1.3.1
 - Naprawa: kilka zapisów szybko po sobie (przed potwierdzeniem bazy) tworzyło duplikaty – nowe wpisy dostają
   identyfikator od razu, a usunięte go zwalniają. (W danych budżetu duplikatów nie było – sprawdzone.)

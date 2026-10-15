@@ -180,6 +180,7 @@ button,input,select{font:inherit;color:inherit}
 .form-err:empty{display:none}
 .offline{position:fixed;top:calc(6px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:65;background:var(--settle-soft);color:var(--ink);font-size:13px;padding:6px 12px;border-radius:999px;display:none}
 .offline.on{display:block}
+.start-rz{margin:4px 0 12px}.start-rz .rz-entry{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0}.start-rz .rz-entry .num{white-space:nowrap}
 .wersja{text-align:center;color:var(--muted);font-size:12px;margin:24px 0 8px}
 .toast{z-index:70!important;width:max-content;max-width:calc(100vw - 32px);white-space:normal;text-align:center;box-sizing:border-box;border-radius:18px}
 body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3px;z-index:60;background:linear-gradient(90deg,transparent,var(--shared),transparent);background-size:50% 100%;background-repeat:no-repeat;animation:odsw 1s linear infinite}@keyframes odsw{from{background-position:-50% 0}to{background-position:150% 0}}
@@ -233,7 +234,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.3.1</p>
+    <p class="wersja">wersja 1.4.0</p>
   </section>
 
   <!-- DODAJ -->
@@ -461,8 +462,9 @@ function obliczStan(raw, m) {
     var pc = pcorr(k, m);
     var ps = psm(k, m) - pc;
     pf += pc;
-    // kto zapłacił/pożyczył – ma mniej, dopóki nieoddane; dłużnik traci dopiero po oddaniu (✓)
-    var adj = k === 0 ? -paidSum[0] - owe[1] : -paidSum[1] - owe[0];
+    // rozliczenia: wpisany dług niczego nie zmienia; po ✓ „oddane” dłużnik ma mniej, wierzyciel więcej
+    // (paidSum[0] = oddane przez osobę 1 osobie 2, paidSum[1] = odwrotnie)
+    var adj = k === 0 ? paidSum[1] - paidSum[0] : paidSum[0] - paidSum[1];
     var carry = 0; for (var q = 1; q < m; q++) carry += zm(k, q);
     var zostalo = zost - pf - ps + adj;
     return { name: k === 0 ? n1 : n2, wyplata: has ? num_(val) : 0, wplata: rec, wplataWeszla: k === 0 ? p.t1 : p.t2,
@@ -518,7 +520,7 @@ function obliczStan(raw, m) {
   })();
 
   // --- samoaktualizacja: telefon potrafi trzymać starą stronę w pamięci; gdy na serwerze jest nowsza, przeładuj ---
-  var APP_V = "1.3.1";
+  var APP_V = "1.4.0";
   (function(){
     if (!window.fetch || location.protocol === "file:") return;
     fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
@@ -868,6 +870,17 @@ function obliczStan(raw, m) {
     var sc = $("settleCard"); sc.textContent = "";
     sc.appendChild(el("h2", "", "Rozliczenia ›"));
     var sr = el("div", "row"); sr.appendChild(el("strong", "", S.settle.text)); sr.appendChild(el("span", "num big", S.settle.amount ? zl(S.settle.amount, true) : "")); sr.lastChild.style.fontSize = "24px"; sc.appendChild(sr);
+    var otwarte = S.settle.list.filter(function(x){ return !x.paid; });
+    if (otwarte.length) {
+      var sl = el("div", "start-rz");
+      otwarte.slice(0, 4).forEach(function(x){
+        var e = el("div", "rz-entry");
+        var w = el("span", "what", x.a ? S.settle.dirs[0] : S.settle.dirs[1]); if (x.note) w.appendChild(el("small", "", " · " + x.note)); e.appendChild(w);
+        e.appendChild(el("span", "num", zl(x.a || x.b, true))); sl.appendChild(e);
+      });
+      if (otwarte.length > 4) sl.appendChild(el("div", "sub", "i jeszcze " + (otwarte.length - 4) + " – stuknij, żeby zobaczyć wszystkie"));
+      sc.appendChild(sl);
+    }
     var sb = el("button", "add-btn", "+ Dodaj rozliczenie"); sb.type = "button"; sb.id = "startSettleAdd"; sb.onclick = function(e){ e.stopPropagation(); show("settle"); }; sc.appendChild(sb);
     sc.onclick = function(){ show("settle"); };
   }
@@ -987,7 +1000,7 @@ function obliczStan(raw, m) {
   function openPos(p, owner, after, fixedDefault, lockOwner, fixedOnly){
     posEdit = p; posAfter = after; posFixedOnly = !!fixedOnly;
     $("posOwnerField").hidden = !!lockOwner;
-    $("posTitle").textContent = fixedOnly ? (p ? "Zmień koszt stały" : "Nowy koszt stały") : p ? "Zmień kategorię" : lockOwner ? (owner === "Wspólne" ? "Nowa kategoria wspólna" : "Nowa kategoria: " + owner) : "Nowa kategoria";
+    $("posTitle").textContent = fixedOnly ? (p ? (p.fixed > 0 ? "Zmień koszt stały" : "Ustaw kwotę stałą") : "Nowy koszt stały") : p ? "Zmień kategorię" : lockOwner ? (owner === "Wspólne" ? "Nowa kategoria wspólna" : "Nowa kategoria: " + owner) : "Nowa kategoria";
     $("posName").value = p ? p.name : ""; $("posErr").textContent = "";
     posOwnerV = p ? (p.ownerOk ? p.owner : "Wspólne") : (owner || "Wspólne");
     posActiveV = p ? p.active : true;
@@ -1113,6 +1126,20 @@ function obliczStan(raw, m) {
       });
       box.appendChild(l);
     });
+    // kategorie bez kwoty stałej też tu widać – stuknięcie pozwala ustawić kwotę (nic się nie chowa)
+    var bez = S.positions.filter(function(p){ return !(p.fixed > 0); });
+    if (bez.length) {
+      box.appendChild(el("div", "pos-group", "Kategorie bez kwoty stałej – stuknij, żeby ustawić kwotę"));
+      var lb = el("div", "pos-list");
+      bez.forEach(function(p){
+        var r = el("div", "fx-row off");
+        var nb = el("button", "fx-name"); nb.type = "button";
+        var t = el("span", "", p.name + " ›"); t.appendChild(el("small", "", own(p) === "Wspólne" ? "wspólna" : own(p)));
+        nb.appendChild(t); nb.onclick = function(){ openPos(p, null, null, true, false, true); }; r.appendChild(nb);
+        r.appendChild(el("span", "num sub", "—")); lb.appendChild(r);
+      });
+      box.appendChild(lb);
+    }
   }
 
   // --- akcje ---
