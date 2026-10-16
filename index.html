@@ -234,7 +234,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.5.1</p>
+    <p class="wersja">wersja 1.6.0</p>
   </section>
 
   <!-- DODAJ -->
@@ -256,7 +256,10 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="field"><div class="lbl-row"><span>Kategoria</span><button type="button" class="link" data-open-pos>Edytuj kategorie</button></div><div class="chips" id="mineChips"></div></div>
     </div>
     <div id="f-settle" hidden>
-      <div class="field"><span>Kto oddaje komu</span><div class="dir" id="dirBtns"></div></div>
+      <div class="field"><span>Jak liczyć</span><div class="dir" id="splitBtns"></div></div>
+      <div class="field"><span id="dirLbl">Kto oddaje komu</span><div class="dir" id="dirBtns"></div></div>
+      <p class="sub" id="splitInfo" style="margin:-4px 2px 10px"></p>
+      <button type="button" class="tick" id="splitExp" aria-pressed="true" style="margin:0 0 12px"></button>
     </div>
     <label class="field"><span id="descLbl">Opis (opcjonalnie)</span><input id="desc" type="text" lang="pl" autocomplete="off" autocapitalize="sentences" spellcheck="true" enterkeyhint="done" placeholder="np. Biedronka"></label>
     <label class="field" id="dateField"><span>Data</span><input id="date" type="date"></label>
@@ -420,7 +423,7 @@ function obliczStan(raw, m) {
   raw.rz.forEach(function (r, i) {
     var a = num_(r[0]), b = num_(r[1]), paid = r[2] === CHECK;
     if (!paid) { owe[0] += a; owe[1] += b; } else { paidSum[0] += a; paidSum[1] += b; }
-    if (!blank_(r[0]) || !blank_(r[1])) rz.push({ row: i, a: a, b: b, paid: paid, note: blank_(r[3]) ? "" : String(r[3]) });
+    if (!blank_(r[0]) || !blank_(r[1])) rz.push({ row: i, a: a, b: b, paid: paid, note: blank_(r[3]) ? "" : String(r[3]), suma: num_(r[4]), pol: r[5] === "pol" });
   });
   var net = owe[0] - owe[1];
   var dirs = [n1 + " → " + n2, n2 + " → " + n1];
@@ -509,7 +512,7 @@ function obliczStan(raw, m) {
 </script>
 <script>
 (function(){
-  var S = null, month = new Date().getMonth() + 1, view = "start", kind = "shared", pos = "", minePos = "", mineWho = 0, dir = 0, busy = false;
+  var S = null, month = new Date().getMonth() + 1, view = "start", kind = "shared", pos = "", minePos = "", mineWho = 0, dir = 0, busy = false, split = "pol", payer = null, splitExp = true;
   var $ = function(id){ return document.getElementById(id); };
   var fmt0 = new Intl.NumberFormat("pl-PL", {maximumFractionDigits: 0});
   var fmt2 = new Intl.NumberFormat("pl-PL", {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -523,6 +526,8 @@ function obliczStan(raw, m) {
     store("budzet_ja", String(k)); cookie("budzet_ja", String(k));
     try { var u = new URL(location.href); u.searchParams.set("ja", String(k)); u.searchParams.delete("_v"); history.replaceState(null, "", u.pathname + u.search + u.hash); } catch(e){}
   }
+  split = store("budzet_podzial") === "cala" ? "cala" : "pol"; // ostatnio wybrany sposób liczenia rozliczenia
+  splitExp = store("budzet_podzial_wydatek") !== "0";
   var me = (function(){
     var m = location.search.match(/[?&]ja=([01])\b/), v = m ? m[1] : (store("budzet_ja") || cookie("budzet_ja"));
     if (v !== "0" && v !== "1") return null;
@@ -531,7 +536,7 @@ function obliczStan(raw, m) {
 
   // --- samoaktualizacja: telefon trzyma aplikację w tle i wznawia starą wersję bez przeładowania,
   // więc sprawdzamy przy starcie i przy każdym powrocie do aplikacji (najwyżej raz na 10 s) ---
-  var APP_V = "1.5.1";
+  var APP_V = "1.6.0";
   function checkUpdate(){
     if (!window.fetch || location.protocol === "file:") return;
     if (checkUpdate.last && Date.now() - checkUpdate.last < 10000) return;
@@ -615,7 +620,7 @@ function obliczStan(raw, m) {
       sk: poz.map(function(x){ return [val(x.d.nazwa), val(x.d.grupa), val(x.d.kwota), val(x.d.czyje) || "Wspólne", val(x.d.aktywna)]; }),
       plan: poz.map(function(x){ var p = (x.d.plan || []).slice(0, 12).map(val); while (p.length < 12) p.push(""); return p; }),
       tx: tx.map(function(x){ return [dateVal(x.d.data), val(x.d.pozycja), val(x.d.kwota), val(x.d.opis)]; }),
-      pay: [], pers: [[], []], rz: rz.map(function(x){ return [val(x.d.a), val(x.d.b), val(x.d.oddane), val(x.d.opis)]; }) };
+      pay: [], pers: [[], []], rz: rz.map(function(x){ return [val(x.d.a), val(x.d.b), val(x.d.oddane), val(x.d.opis), val(x.d.suma), val(x.d.podzial)]; }) };
     for (var m = 1; m <= 12; m++) { var w = wyp[String(m)] || {}; raw.pay.push([val(w.c), val(w.d), val(w.e), val(w.t1), val(w.t2)]); }
     var ids = { sk: poz.map(idOf), tx: tx.map(idOf), pers: [[], []], rz: rz.map(idOf) };
     os.forEach(function(x){ var k = Number(x.d.osoba) === 1 ? 1 : 0; raw.pers[k].push([dateVal(x.d.data), val(x.d.opis), val(x.d.kwota), val(x.d.pozycja)]); ids.pers[k].push(x.id); });
@@ -710,7 +715,7 @@ function obliczStan(raw, m) {
     };
     col("tx", prev.tx, next.tx, IDS.tx, isBlank4, function(r){ return { data: r[0], pozycja: r[1], kwota: r[2], opis: r[3] }; });
     [0, 1].forEach(function(k){ col("osobiste", prev.pers[k], next.pers[k], IDS.pers[k], isBlank4, function(r){ return { osoba: k, data: r[0], opis: r[1], kwota: r[2], pozycja: r[3] }; }); });
-    col("rozliczenia", prev.rz, next.rz, IDS.rz, isBlank4, function(r){ return { a: r[0], b: r[1], oddane: r[2], opis: r[3] }; });
+    col("rozliczenia", prev.rz, next.rz, IDS.rz, isBlank4, function(r){ return { a: r[0], b: r[1], oddane: r[2], opis: r[3], suma: r[4] === undefined ? "" : r[4], podzial: r[5] || "" }; });
     var maxKol = 0; (docs.pozycje || []).forEach(function(x){ maxKol = Math.max(maxKol, x.d.kol || 0); });
     var skRows = next.sk.map(function(r, i){ return r.concat([next.plan[i]]); }), skOld = prev.sk.map(function(r, i){ return r.concat([prev.plan[i]]); });
     col("pozycje", skOld, skRows, IDS.sk, function(r){ return String(r[0]).trim() === ""; },
@@ -770,7 +775,16 @@ function obliczStan(raw, m) {
     usunWpis: function(r, d){ var t = d.typ === "tx" ? r.tx : d.typ === "os" ? r.pers[Number(d.osoba) === 1 ? 1 : 0] : d.typ === "rz" ? r.rz : null; if (t && t[Number(d.row)]) t[Number(d.row)] = ["", "", "", ""]; },
     zapiszWyplaty: function(r, d){ var v = function(x){ return (x === "" || x === null || x === undefined) ? "" : kw(x); }; var p = r.pay[Number(d.miesiac) - 1]; p[0] = v(d.c); p[1] = v(d.d); p[2] = v(d.e); },
     ustawPrzelew: function(r, d){ r.pay[Number(d.miesiac) - 1][Number(d.osoba) === 1 ? 4 : 3] = d.wszedl ? "✓" : ""; },
-    dodajRozliczenie: function(r, d){ var k = kw(d.kwota), b = Number(d.kierunek) === 1; r.rz[empty(r.rz)] = [b ? "" : k, b ? k : "", "", d.opis || ""]; },
+    dodajRozliczenie: function(r, d){
+      if (d.podzial === "pol") {
+        // Splitwise 50/50: zapłacił „placi”, druga osoba oddaje mu połowę (a = osoba 1 → osoba 2, b = odwrotnie)
+        var suma = kw(d.kwota), pol = Math.round(suma * 50) / 100, placi = Number(d.placi) === 1 ? 1 : 0;
+        r.rz[empty(r.rz)] = [placi === 1 ? pol : "", placi === 0 ? pol : "", "", d.opis || "", suma, "pol"];
+        // płacący wydał całą kwotę z własnych pieniędzy – dopisz mu wydatek osobisty (po ✓ odzyska połowę)
+        if (d.wydatek) { var t = r.pers[placi]; t[empty(t)] = [dt(d.data), (d.opis ? d.opis + " " : "") + "(na pół)", suma, ""]; }
+        return;
+      }
+      var k = kw(d.kwota), b = Number(d.kierunek) === 1; r.rz[empty(r.rz)] = [b ? "" : k, b ? k : "", "", d.opis || ""]; },
     ustawOddane: function(r, d){ if (r.rz[Number(d.row)]) r.rz[Number(d.row)][2] = d.oddane ? "✓" : ""; },
     aktualizujStan: function(r, d){
       var k = Number(d.osoba) === 1 ? 1 : 0, m = Number(d.miesiac);
@@ -916,7 +930,7 @@ function obliczStan(raw, m) {
       var sl = el("div", "start-rz");
       otwarte.slice(0, 4).forEach(function(x){
         var e = el("div", "rz-entry");
-        var w = el("span", "what", x.a ? S.settle.dirs[0] : S.settle.dirs[1]); if (x.note) w.appendChild(el("small", "", " · " + x.note)); e.appendChild(w);
+        var w = el("span", "what", x.a ? S.settle.dirs[0] : S.settle.dirs[1]); if (x.note) w.appendChild(el("small", "", " · " + x.note)); if (x.pol && x.suma) w.appendChild(el("small", "", " · połowa z " + zl(x.suma, true))); e.appendChild(w);
         e.appendChild(el("span", "num", zl(x.a || x.b, true))); sl.appendChild(e);
       });
       if (otwarte.length > 4) sl.appendChild(el("div", "sub", "i jeszcze " + (otwarte.length - 4) + " – stuknij, żeby zobaczyć wszystkie"));
@@ -955,8 +969,21 @@ function obliczStan(raw, m) {
     var pl = varList(S.names[mineWho]);
     if (pl.indexOf(minePos) < 0) minePos = "";
     chips($("mineChips"), pl, minePos, function(n){ minePos = n; renderAdd(); }, true, function(){ openPos(null, S.names[mineWho], "mine", false, true); });
+    var sb = $("splitBtns"); sb.textContent = "";
+    [["pol", "Na pół (50/50)"], ["cala", "Cała kwota"]].forEach(function(o){ var b = el("button", "", o[1]); b.type = "button"; b.setAttribute("aria-pressed", String(split === o[0])); b.onclick = function(){ split = o[0]; store("budzet_podzial", split); renderAdd(); }; sb.appendChild(b); });
     var db = $("dirBtns"); db.textContent = "";
-    S.settle.dirs.forEach(function(t, k){ var b = el("button", "", t); b.type = "button"; b.setAttribute("aria-pressed", String(dir === k)); b.onclick = function(){ dir = k; renderAdd(); }; db.appendChild(b); });
+    if (split === "pol") {
+      $("dirLbl").textContent = "Kto zapłacił";
+      if (payer === null) payer = me === null ? 0 : me;
+      S.names.forEach(function(n, k){ var b = el("button", "", "Zapłacił(a) " + n); b.type = "button"; b.setAttribute("aria-pressed", String(payer === k)); b.onclick = function(){ payer = k; renderAdd(); }; db.appendChild(b); });
+    } else {
+      $("dirLbl").textContent = "Kto oddaje komu";
+      S.settle.dirs.forEach(function(t, k){ var b = el("button", "", t); b.type = "button"; b.setAttribute("aria-pressed", String(dir === k)); b.onclick = function(){ dir = k; renderAdd(); }; db.appendChild(b); });
+    }
+    $("splitExp").hidden = split !== "pol";
+    if (split === "pol") { var se = $("splitExp"); se.setAttribute("aria-pressed", String(splitExp)); se.textContent = "";
+      se.appendChild(el("span", "", "Dopisz całą kwotę do wydatków osobistych: " + S.names[payer === null ? 0 : payer])); se.appendChild(el("span", "box", "✓")); }
+    splitInfo();
 
   }
 
@@ -1112,7 +1139,7 @@ function obliczStan(raw, m) {
     $("settleListCard").hidden = !S.settle.list.length;
     S.settle.list.forEach(function(x){
       var e = el("div", "rz-entry" + (x.paid ? " paid" : ""));
-      var w = el("span", "what", x.a ? S.settle.dirs[0] : S.settle.dirs[1]); if (x.note) w.appendChild(el("small", "", " · " + x.note)); e.appendChild(w);
+      var w = el("span", "what", x.a ? S.settle.dirs[0] : S.settle.dirs[1]); if (x.note) w.appendChild(el("small", "", " · " + x.note)); if (x.pol && x.suma) w.appendChild(el("small", "", " · połowa z " + zl(x.suma, true))); e.appendChild(w);
       e.appendChild(el("span", "num", zl(x.a || x.b, true)));
       var t = el("button", "mini", "✓"); t.setAttribute("aria-label", x.paid ? "Odznacz oddane" : "Zaznacz jako oddane"); t.setAttribute("aria-pressed", String(x.paid));
       t.onclick = function(){ call("ustawOddane", {row: x.row, oddane: !x.paid, miesiac: month}, x.paid ? "Odznaczono" : "Oddane ✓"); }; e.appendChild(t);
@@ -1191,6 +1218,7 @@ function obliczStan(raw, m) {
     var done = function(pr){ pr.then(function(ok){ if (ok) { $("amt").value = ""; $("desc").value = ""; show(addFrom || "start"); } }); };
     if (kind === "shared") { if (!pos) { toast(varList("Wspólne").length ? "Wybierz kategorię." : "Najpierw dodaj kategorię.", true); return; } done(call("dodajWydatek", {data: date, pozycja: pos, kwota: a, opis: desc, miesiac: m}, "Zapisano wydatek")); }
     else if (kind === "mine") { done(call("dodajOsobisty", {osoba: mineWho, data: date, pozycja: minePos, kwota: a, opis: desc, miesiac: m}, "Zapisano wydatek")); }
+    else if (split === "pol") { var pol = Math.round(a * 50) / 100; done(call("dodajRozliczenie", {podzial: "pol", placi: payer, kwota: a, opis: desc, wydatek: splitExp, data: today(), miesiac: month}, "Zapisano – " + S.names[1 - payer] + " odda " + zl(pol, true))); }
     else { done(call("dodajRozliczenie", {kierunek: dir, kwota: a, opis: desc, miesiac: month}, "Zapisano rozliczenie")); }
   };
   document.querySelectorAll(".seg button").forEach(function(b){ b.onclick = function(){ kind = b.dataset.kind; if (kind === "mine" && me !== null) mineWho = me; renderAdd(); }; });
@@ -1198,6 +1226,15 @@ function obliczStan(raw, m) {
   $("tick1").onclick = function(){ if (S.pay.e === "") { toast("Najpierw wpisz wpłatę na wspólne konto.", true); return; } call("ustawPrzelew", {miesiac: month, osoba: 0, wszedl: !S.pay.t1}, S.pay.t1 ? "Odznaczono" : "Przelew wykonany ✓"); };
   $("tick2").onclick = function(){ if (S.pay.e === "") { toast("Najpierw wpisz wpłatę na wspólne konto.", true); return; } call("ustawPrzelew", {miesiac: month, osoba: 1, wszedl: !S.pay.t2}, S.pay.t2 ? "Odznaczono" : "Przelew wykonany ✓"); };
   function openAdd(k){ kind = k; addFrom = view; show("add"); }
+  // podgląd podziału: kto ile odda
+  function splitInfo(){
+    var i = $("splitInfo"); if (!i) return;
+    if (kind !== "settle" || split !== "pol" || payer === null) { i.textContent = ""; return; }
+    var a = amount(), other = S.names[1 - payer];
+    i.textContent = a ? "Do oddania: " + other + " → " + S.names[payer] + " " + zl(Math.round(a * 50) / 100, true) + " (połowa z " + zl(a, true) + ")" : "Wpisz całą kwotę rachunku – " + other + " odda połowę.";
+  }
+  $("amt").addEventListener("input", splitInfo);
+  $("splitExp").onclick = function(){ splitExp = !splitExp; store("budzet_podzial_wydatek", splitExp ? "1" : "0"); renderAdd(); };
   var addFrom = "start";
   $("addBack").onclick = function(){ show(addFrom || "start"); };
   $("settleAdd").onclick = function(){ openAdd("settle"); };

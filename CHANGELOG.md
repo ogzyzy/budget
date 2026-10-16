@@ -3,6 +3,12 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.6.0
+- Rozliczenia „Na pół (50/50)” jak w Splitwise: wybierasz, kto zapłacił, wpisujesz całą kwotę rachunku – druga
+  osoba ma do oddania połowę. Podgląd „Do oddania: X → Y …” przy wpisywaniu, na liście „połowa z … zł”.
+- Domyślnie płacącemu dopisuje się wydatek osobisty na całą kwotę (po ✓ odzyskuje połowę) – przełącznik w formularzu.
+- „Cała kwota” działa jak dotąd; aplikacja pamięta ostatni wybór.
+
 ## 1.5.1
 - „Stałe” pokazuje tylko kategorie z kwotą; kategorie bez kwoty (19 z szablonu arkusza) zostają do wyboru
   przy dodawaniu wydatku. Koszt stały o nazwie takiej kategorii nadal ją przejmuje.
