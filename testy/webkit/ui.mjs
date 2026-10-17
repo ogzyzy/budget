@@ -52,6 +52,7 @@ try {
   W.podglad = await js('return document.getElementById("splitInfo").textContent');
   await (await d.findElement({ css: '#desc' })).sendKeys('kolacja'); await tap('#saveBtn'); await sleep(400);
   W.rozliczenia = await js('const s = obliczStan(window.BUDZET_TEST.raw(), 10); return s.settle.list.map(x => (x.a ? s.settle.dirs[0] : s.settle.dirs[1]) + " " + (x.a || x.b) + " " + x.note + (x.pol ? " pół z " + x.suma : ""))');
+  await tap('.tab[data-view="mine"]'); W.osobisteKategorie = await js('return [...document.querySelectorAll("#mineByPos > *")].map(e => e.textContent.trim()).filter(Boolean).slice(0, 5)');
   W.poziomyScroll = await js('return document.documentElement.scrollWidth > innerWidth');
   fs.writeFileSync(DIR + '/ui-settle.png', Buffer.from(await d.takeScreenshot(), 'base64'));
   W.bledyJS = await js('return window.__err');

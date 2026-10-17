@@ -3,6 +3,9 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.8.1
+- Osobiste → Kategorie: wydatek dopisany przy rozliczeniu „na pół” pokazuje się jako „Na pół” zamiast „bez kategorii”.
+
 ## 1.8.0
 - Zmiana miesiąca: stuknięcie w nazwę miesiąca otwiera siatkę 12 miesięcy (bieżący obramowany, wybrany
   zaznaczony); strzałki ‹ › usunięte.

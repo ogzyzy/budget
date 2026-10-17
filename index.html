@@ -241,7 +241,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.8.0</p>
+    <p class="wersja">wersja 1.8.1</p>
   </section>
 
   <!-- DODAJ -->
@@ -542,7 +542,7 @@ function obliczStan(raw, m) {
 
   // --- samoaktualizacja: telefon trzyma aplikację w tle i wznawia starą wersję bez przeładowania,
   // więc sprawdzamy przy starcie i przy każdym powrocie do aplikacji (najwyżej raz na 10 s) ---
-  var APP_V = "1.8.0";
+  var APP_V = "1.8.1";
   function checkUpdate(){
     if (!window.fetch || location.protocol === "file:") return;
     if (checkUpdate.last && Date.now() - checkUpdate.last < 10000) return;
@@ -1110,7 +1110,7 @@ function obliczStan(raw, m) {
     c.appendChild(el("h2", "", "Wydane w tym miesiącu"));
     c.appendChild(el("div", "big", zl(p.wydane)));
     var list = S.recent.pers[mineView], sums = {}, order = [];
-    list.forEach(function(t){ var k = t.what === "Aktualizacja stanu" ? "Aktualizacja stanu" : (t.pos || "bez kategorii"); if (!(k in sums)) { sums[k] = 0; order.push(k); } sums[k] += t.amount; });
+    list.forEach(function(t){ var k = t.what === "Aktualizacja stanu" ? "Aktualizacja stanu" : /\(na pół\)$/.test(t.what) && !t.pos ? "Na pół" : (t.pos || "bez kategorii"); if (!(k in sums)) { sums[k] = 0; order.push(k); } sums[k] += t.amount; });
     order.sort(function(a, b){ return sums[b] - sums[a]; });
     bars($("mineByPos"), order.map(function(k){ return {k: k, v: sums[k]}; }), mineView ? "--p2" : "--p1");
     $("mineByPos").parentNode.hidden = !order.length || (order.length === 1 && order[0] === "bez kategorii");
