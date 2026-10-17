@@ -3,6 +3,12 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.7.0
+- Kolejność kategorii: przytrzymaj kafelek (~0,35 s), przesuń w górę/dół i puść – w „Stałych” i na liście
+  kategorii; kolejność zapisuje się w bazie i obowiązuje też w kafelkach przy dodawaniu wydatku.
+- Naprawa: przy kilku zapisach pod rząd (4+ wydatki/kategorie, zanim baza potwierdzi) brakowało wolnych miejsc
+  („Brak wolnych miejsc…”/„Tabela jest pełna”).
+
 ## 1.6.1
 - „Na pół” działa jak Splitwise bez dodatkowych pytań: płacący zawsze dostaje wydatek osobisty na całą kwotę,
   druga osoba – połowę do oddania. Usunięto przełącznik „Dopisz całą kwotę…”.

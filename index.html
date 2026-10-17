@@ -181,6 +181,10 @@ button,input,select{font:inherit;color:inherit}
 .offline{position:fixed;top:calc(6px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:65;background:var(--settle-soft);color:var(--ink);font-size:13px;padding:6px 12px;border-radius:999px;display:none}
 .offline.on{display:block}
 .start-rz{margin:4px 0 12px}.start-rz .rz-entry{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0}.start-rz .rz-entry .num{white-space:nowrap}
+.drag-src{position:relative;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,.18);transform-origin:center;transition:box-shadow .15s}
+.drag-on .pos-list > *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.pos-list > *{-webkit-touch-callout:none}
+body.dragging{overflow:hidden;touch-action:none}
 .wersja{text-align:center;color:var(--muted);font-size:12px;margin:24px 0 8px}
 .toast{z-index:70!important;width:max-content;max-width:calc(100vw - 32px);white-space:normal;text-align:center;box-sizing:border-box;border-radius:18px}
 body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3px;z-index:60;background:linear-gradient(90deg,transparent,var(--shared),transparent);background-size:50% 100%;background-repeat:no-repeat;animation:odsw 1s linear infinite}@keyframes odsw{from{background-position:-50% 0}to{background-position:150% 0}}
@@ -234,7 +238,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.6.1</p>
+    <p class="wersja">wersja 1.7.0</p>
   </section>
 
   <!-- DODAJ -->
@@ -534,7 +538,7 @@ function obliczStan(raw, m) {
 
   // --- samoaktualizacja: telefon trzyma aplikację w tle i wznawia starą wersję bez przeładowania,
   // więc sprawdzamy przy starcie i przy każdym powrocie do aplikacji (najwyżej raz na 10 s) ---
-  var APP_V = "1.6.1";
+  var APP_V = "1.7.0";
   function checkUpdate(){
     if (!window.fetch || location.protocol === "file:") return;
     if (checkUpdate.last && Date.now() - checkUpdate.last < 10000) return;
@@ -693,7 +697,7 @@ function obliczStan(raw, m) {
   var renderLater = false;
   function typing(){ var a = document.activeElement; return !!a && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !/^(checkbox|radio|button|submit)$/.test(a.type))); }
   document.addEventListener("focusout", function(){ setTimeout(function(){ if (renderLater && !typing()) { renderLater = false; render(); } }, 0); });
-  function set(s){ S = s; month = s.month; document.body.classList.remove("loading"); busy = false; if (S && typing()) { renderLater = true; return; } render(); }
+  function set(s){ S = s; month = s.month; document.body.classList.remove("loading"); busy = false; if (S && (typing() || dragging)) { renderLater = true; if (dragging) setTimeout(function again(){ if (dragging) return setTimeout(again, 200); if (renderLater && !typing()) { renderLater = false; render(); } }, 200); return; } render(); }
   function fail(e){ document.body.classList.remove("loading"); busy = false; var msg = (e && e.message) || "Coś poszło nie tak."; if (!S) { $("bladTxt").textContent = msg; $("blad").className = "blad on"; } else toast(msg, true); }
 
   // --- zapis: lokalna operacja na kopii RAW, potem różnice → jedna paczka zapisów do bazy ---
@@ -730,6 +734,65 @@ function obliczStan(raw, m) {
       ch.forEach(function(o){ var ref = FB.doc.apply(null, [db].concat(o.p)); if (o.t === "del") b.delete(ref); else b.set(ref, o.d, o.merge ? { merge: true } : {}); });
       return b.commit();
     }));
+  }
+
+  // --- kolejność kategorii (przeciąganie): nowa kolejność wierszy RAW.sk → pole „kol” w bazie ---
+  function reorder(order){
+    if (!RAW || !IDS) return;
+    var seen = {}; order.forEach(function(i){ seen[i] = 1; });
+    var full = order.concat(RAW.sk.map(function(_, i){ return i; }).filter(function(i){ return !seen[i]; }));
+    var next = copyRaw(RAW), ids = full.map(function(i){ return IDS.sk[i]; });
+    next.sk = full.map(function(i){ return copyRaw({ x: RAW.sk[i] }).x; }); next.plan = full.map(function(i){ return RAW.plan[i].slice(); });
+    var list = []; ids.forEach(function(id, k){ if (id) list.push({ t: "set", p: ["budzety", KEY, "pozycje", id], d: { kol: k }, merge: true }); });
+    if (!list.length) return;
+    IDS = JSON.parse(JSON.stringify(IDS)); IDS.sk = ids;
+    expect(list);
+    commit(list).catch(function(e){ waiting = {}; pend = {}; rebuild(); toast("Nie zapisano kolejności: " + ((e && e.message) || "błąd"), true); });
+    RAW = next; show_(month);
+  }
+  // przeciąganie kafelków w liście: przytrzymaj ~0,35 s, przesuń, puść. Ruch przed podniesieniem = zwykłe przewijanie.
+  var dragging = false;
+  function sortable(list, onDone){
+    Array.prototype.forEach.call(list.children, function(row){
+      var timer = null, sx = 0, sy = 0, startY = 0, active = false, pid = null;
+      var cancel = function(){ clearTimeout(timer); timer = null; };
+      row.addEventListener("pointerdown", function(e){
+        if (e.button > 0 || /^(INPUT|TEXTAREA)$/.test(e.target.tagName) || e.target.closest(".fx-ok")) return;
+        sx = e.clientX; sy = e.clientY; pid = e.pointerId; cancel();
+        timer = setTimeout(function(){
+          active = true; dragging = true; startY = sy;
+          document.body.classList.add("dragging", "drag-on"); row.classList.add("drag-src");
+          try { row.setPointerCapture(pid); } catch(err){}
+          if (navigator.vibrate) try { navigator.vibrate(15); } catch(err){}
+        }, 350);
+      });
+      row.addEventListener("pointermove", function(e){
+        if (!active) { if (timer && (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8)) cancel(); return; }
+        e.preventDefault();
+        var y = e.clientY;
+        row.style.transform = "translateY(" + (y - startY) + "px)";
+        var prev = row.previousElementSibling, nxt = row.nextElementSibling;
+        if (prev && y < prev.getBoundingClientRect().top + prev.offsetHeight / 2) { var h = prev.offsetHeight; list.insertBefore(row, prev); startY -= h; row.style.transform = "translateY(" + (y - startY) + "px)"; }
+        else if (nxt && y > nxt.getBoundingClientRect().top + nxt.offsetHeight / 2) { var h2 = nxt.offsetHeight; list.insertBefore(nxt, row); startY += h2; row.style.transform = "translateY(" + (y - startY) + "px)"; }
+      });
+      var end = function(){
+        cancel(); if (!active) return;
+        active = false; row.classList.remove("drag-src"); row.style.transform = "";
+        document.body.classList.remove("dragging", "drag-on");
+        row.addEventListener("click", function stop(ev){ ev.stopPropagation(); ev.preventDefault(); row.removeEventListener("click", stop, true); }, true);
+        setTimeout(function(){ dragging = false; onDone(Array.prototype.map.call(list.children, function(x){ return Number(x.dataset.row); })); }, 0);
+      };
+      row.addEventListener("pointerup", end); row.addEventListener("pointercancel", end);
+      // po podniesieniu kafelka palec nie przewija strony (inaczej przeglądarka przerwie przeciąganie)
+      row.addEventListener("touchmove", function(e){ if (active) e.preventDefault(); }, { passive: false });
+      row.addEventListener("contextmenu", function(e){ if (timer || active) e.preventDefault(); });
+    });
+  }
+  // przesunięcie w obrębie jednej listy (sekcji): pozostałe kategorie zachowują swoje miejsca
+  function moveWithin(sectionRows){
+    var all = RAW.sk.map(function(x, i){ return i; }).filter(function(i){ return String(RAW.sk[i][0]).trim(); });
+    var slots = all.filter(function(i){ return sectionRows.indexOf(i) >= 0; }), k = 0;
+    reorder(all.map(function(i){ return slots.indexOf(i) >= 0 ? sectionRows[k++] : i; }));
   }
 
   // --- jednorazowe przeniesienie danych z arkusza Google (Apps Script) do bazy ---
@@ -856,6 +919,9 @@ function obliczStan(raw, m) {
   function call(fn, arg, ok){
     if (!RAW || !LOCAL[fn]) return Promise.resolve(false);
     var next = copyRaw(RAW);
+    // zawsze wolne miejsca na nowe wpisy – także przy kilku zapisach pod rząd, zanim baza je potwierdzi
+    pad(next.sk, ZAPAS, function(){ return ["", "", "", "Wspólne", "✓"]; }); pad(next.plan, ZAPAS, function(){ return ["", "", "", "", "", "", "", "", "", "", "", ""]; });
+    pad(next.tx, ZAPAS, blank4); pad(next.pers[0], ZAPAS, blank4); pad(next.pers[1], ZAPAS, blank4); pad(next.rz, ZAPAS, blank4);
     try { LOCAL[fn](next, arg); } catch(e){ toast(e.message, true); return Promise.resolve(false); }
     var prevIds = IDS; IDS = JSON.parse(JSON.stringify(IDS));
     var list; try { list = ops(RAW, next); } catch(e){ IDS = prevIds; throw e; }
@@ -1059,13 +1125,13 @@ function obliczStan(raw, m) {
       box.appendChild(el("div", "pos-group", sec.t));
       var l = el("div", "pos-list");
       sec.it.forEach(function(p){
-        var b = el("button", "pos-item" + (p.active ? "" : " off")); b.type = "button";
+        var b = el("button", "pos-item" + (p.active ? "" : " off")); b.type = "button"; b.dataset.row = p.row;
         var t = el("span", "", p.name); t.appendChild(el("small", "", (p.active ? "" : "wyłączona"))); b.appendChild(t);
         b.appendChild(el("span", "sub", "Zmień ›"));
         b.onclick = function(){ openPos(p, null, null); };
         l.appendChild(b);
       });
-      box.appendChild(l);
+      box.appendChild(l); sortable(l, moveWithin);
     });
   }
   var posFixedOnly = false;
@@ -1170,7 +1236,7 @@ function obliczStan(raw, m) {
       box.appendChild(el("div", "pos-group", o));
       var l = el("div", "pos-list");
       it.forEach(function(p){
-        var r = el("div", "fx-row" + (p.active ? "" : " off"));
+        var r = el("div", "fx-row" + (p.active ? "" : " off")); r.dataset.row = p.row;
         var nb = el("button", "fx-name"); nb.type = "button";
         var t = el("span", "", p.name + " ›");
         var note = !p.active ? "wyłączona" : (Math.abs(p.month - p.fixed) >= 0.005 ? "zwykle " + zl(p.fixed, true) : "");
@@ -1196,7 +1262,7 @@ function obliczStan(raw, m) {
         } else r.appendChild(el("span", "num sub", zl(p.fixed, true)));
         l.appendChild(r);
       });
-      box.appendChild(l);
+      box.appendChild(l); sortable(l, moveWithin);
     });
   }
 
