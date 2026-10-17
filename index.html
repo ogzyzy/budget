@@ -183,7 +183,7 @@ button,input,select{font:inherit;color:inherit}
 .start-rz{margin:4px 0 12px}.start-rz .rz-entry{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0}.start-rz .rz-entry .num{white-space:nowrap}
 .drag-src{position:relative;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,.18);transform-origin:center;transition:box-shadow .15s}
 .drag-on .pos-list > *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.pos-list > *{-webkit-touch-callout:none}
+.pos-list > *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none} /* iPhone: przytrzymanie nie zaznacza tekstu ani nie otwiera menu */
 body.dragging{overflow:hidden;touch-action:none}
 .wersja{text-align:center;color:var(--muted);font-size:12px;margin:24px 0 8px}
 .toast{z-index:70!important;width:max-content;max-width:calc(100vw - 32px);white-space:normal;text-align:center;box-sizing:border-box;border-radius:18px}
@@ -238,7 +238,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.7.0</p>
+    <p class="wersja">wersja 1.7.1</p>
   </section>
 
   <!-- DODAJ -->
@@ -538,7 +538,7 @@ function obliczStan(raw, m) {
 
   // --- samoaktualizacja: telefon trzyma aplikację w tle i wznawia starą wersję bez przeładowania,
   // więc sprawdzamy przy starcie i przy każdym powrocie do aplikacji (najwyżej raz na 10 s) ---
-  var APP_V = "1.7.0";
+  var APP_V = "1.7.1";
   function checkUpdate(){
     if (!window.fetch || location.protocol === "file:") return;
     if (checkUpdate.last && Date.now() - checkUpdate.last < 10000) return;

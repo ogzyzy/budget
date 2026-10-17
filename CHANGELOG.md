@@ -3,6 +3,9 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.7.1
+- iPhone: przytrzymanie kafelka nie zaznacza tekstu ani nie otwiera menu (przed przeciąganiem).
+
 ## 1.7.0
 - Kolejność kategorii: przytrzymaj kafelek (~0,35 s), przesuń w górę/dół i puść – w „Stałych” i na liście
   kategorii; kolejność zapisuje się w bazie i obowiązuje też w kafelkach przy dodawaniu wydatku.
