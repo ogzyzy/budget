@@ -3,6 +3,10 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.8.0
+- Zmiana miesiąca: stuknięcie w nazwę miesiąca otwiera siatkę 12 miesięcy (bieżący obramowany, wybrany
+  zaznaczony); strzałki ‹ › usunięte.
+
 ## 1.7.1
 - iPhone: przytrzymanie kafelka nie zaznacza tekstu ani nie otwiera menu (przed przeciąganiem).
 
