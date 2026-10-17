@@ -234,7 +234,7 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="free" id="freeList"></div>
     </div>
     <button type="button" class="link foot-link" id="whoBtn"></button>
-    <p class="wersja">wersja 1.6.0</p>
+    <p class="wersja">wersja 1.6.1</p>
   </section>
 
   <!-- DODAJ -->
@@ -259,7 +259,6 @@ body.refreshing::before{content:"";position:fixed;top:0;left:0;right:0;height:3p
       <div class="field"><span>Jak liczyć</span><div class="dir" id="splitBtns"></div></div>
       <div class="field"><span id="dirLbl">Kto oddaje komu</span><div class="dir" id="dirBtns"></div></div>
       <p class="sub" id="splitInfo" style="margin:-4px 2px 10px"></p>
-      <button type="button" class="tick" id="splitExp" aria-pressed="true" style="margin:0 0 12px"></button>
     </div>
     <label class="field"><span id="descLbl">Opis (opcjonalnie)</span><input id="desc" type="text" lang="pl" autocomplete="off" autocapitalize="sentences" spellcheck="true" enterkeyhint="done" placeholder="np. Biedronka"></label>
     <label class="field" id="dateField"><span>Data</span><input id="date" type="date"></label>
@@ -512,7 +511,7 @@ function obliczStan(raw, m) {
 </script>
 <script>
 (function(){
-  var S = null, month = new Date().getMonth() + 1, view = "start", kind = "shared", pos = "", minePos = "", mineWho = 0, dir = 0, busy = false, split = "pol", payer = null, splitExp = true;
+  var S = null, month = new Date().getMonth() + 1, view = "start", kind = "shared", pos = "", minePos = "", mineWho = 0, dir = 0, busy = false, split = "pol", payer = null;
   var $ = function(id){ return document.getElementById(id); };
   var fmt0 = new Intl.NumberFormat("pl-PL", {maximumFractionDigits: 0});
   var fmt2 = new Intl.NumberFormat("pl-PL", {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -527,7 +526,6 @@ function obliczStan(raw, m) {
     try { var u = new URL(location.href); u.searchParams.set("ja", String(k)); u.searchParams.delete("_v"); history.replaceState(null, "", u.pathname + u.search + u.hash); } catch(e){}
   }
   split = store("budzet_podzial") === "cala" ? "cala" : "pol"; // ostatnio wybrany sposób liczenia rozliczenia
-  splitExp = store("budzet_podzial_wydatek") !== "0";
   var me = (function(){
     var m = location.search.match(/[?&]ja=([01])\b/), v = m ? m[1] : (store("budzet_ja") || cookie("budzet_ja"));
     if (v !== "0" && v !== "1") return null;
@@ -536,7 +534,7 @@ function obliczStan(raw, m) {
 
   // --- samoaktualizacja: telefon trzyma aplikację w tle i wznawia starą wersję bez przeładowania,
   // więc sprawdzamy przy starcie i przy każdym powrocie do aplikacji (najwyżej raz na 10 s) ---
-  var APP_V = "1.6.0";
+  var APP_V = "1.6.1";
   function checkUpdate(){
     if (!window.fetch || location.protocol === "file:") return;
     if (checkUpdate.last && Date.now() - checkUpdate.last < 10000) return;
@@ -772,7 +770,16 @@ function obliczStan(raw, m) {
   var LOCAL = {
     dodajWydatek: function(r, d){ if (!String(d.pozycja || "").trim()) throw new Error("Wybierz kategorię."); r.tx[empty(r.tx)] = [dt(d.data), d.pozycja || "", kw(d.kwota), d.opis || ""]; },
     dodajOsobisty: function(r, d){ var t = r.pers[Number(d.osoba) === 1 ? 1 : 0]; t[empty(t)] = [dt(d.data), d.opis || "", kw(d.kwota), d.pozycja || ""]; },
-    usunWpis: function(r, d){ var t = d.typ === "tx" ? r.tx : d.typ === "os" ? r.pers[Number(d.osoba) === 1 ? 1 : 0] : d.typ === "rz" ? r.rz : null; if (t && t[Number(d.row)]) t[Number(d.row)] = ["", "", "", ""]; },
+    usunWpis: function(r, d){
+      var t = d.typ === "tx" ? r.tx : d.typ === "os" ? r.pers[Number(d.osoba) === 1 ? 1 : 0] : d.typ === "rz" ? r.rz : null, w = t && t[Number(d.row)];
+      if (!w) return;
+      if (d.typ === "rz" && w[5] === "pol") {
+        // rozliczenie na pół: usuń też wydatek płacącego („… (na pół)”, cała kwota)
+        var placi = w[0] !== "" && w[0] !== null ? 1 : 0, opis = (w[3] ? w[3] + " " : "") + "(na pół)", pt = r.pers[placi];
+        for (var i = 0; i < pt.length; i++) if (String(pt[i][1]) === opis && Number(pt[i][2]) === Number(w[4])) { pt[i] = ["", "", "", ""]; break; }
+      }
+      t[Number(d.row)] = ["", "", "", ""];
+    },
     zapiszWyplaty: function(r, d){ var v = function(x){ return (x === "" || x === null || x === undefined) ? "" : kw(x); }; var p = r.pay[Number(d.miesiac) - 1]; p[0] = v(d.c); p[1] = v(d.d); p[2] = v(d.e); },
     ustawPrzelew: function(r, d){ r.pay[Number(d.miesiac) - 1][Number(d.osoba) === 1 ? 4 : 3] = d.wszedl ? "✓" : ""; },
     dodajRozliczenie: function(r, d){
@@ -780,8 +787,8 @@ function obliczStan(raw, m) {
         // Splitwise 50/50: zapłacił „placi”, druga osoba oddaje mu połowę (a = osoba 1 → osoba 2, b = odwrotnie)
         var suma = kw(d.kwota), pol = Math.round(suma * 50) / 100, placi = Number(d.placi) === 1 ? 1 : 0;
         r.rz[empty(r.rz)] = [placi === 1 ? pol : "", placi === 0 ? pol : "", "", d.opis || "", suma, "pol"];
-        // płacący wydał całą kwotę z własnych pieniędzy – dopisz mu wydatek osobisty (po ✓ odzyska połowę)
-        if (d.wydatek) { var t = r.pers[placi]; t[empty(t)] = [dt(d.data), (d.opis ? d.opis + " " : "") + "(na pół)", suma, ""]; }
+        // jak w Splitwise: płacący wydał całą kwotę – zawsze dopisz mu wydatek osobisty (po ✓ odzyska połowę)
+        { var t = r.pers[placi]; t[empty(t)] = [dt(d.data), (d.opis ? d.opis + " " : "") + "(na pół)", suma, ""]; }
         return;
       }
       var k = kw(d.kwota), b = Number(d.kierunek) === 1; r.rz[empty(r.rz)] = [b ? "" : k, b ? k : "", "", d.opis || ""]; },
@@ -980,9 +987,6 @@ function obliczStan(raw, m) {
       $("dirLbl").textContent = "Kto oddaje komu";
       S.settle.dirs.forEach(function(t, k){ var b = el("button", "", t); b.type = "button"; b.setAttribute("aria-pressed", String(dir === k)); b.onclick = function(){ dir = k; renderAdd(); }; db.appendChild(b); });
     }
-    $("splitExp").hidden = split !== "pol";
-    if (split === "pol") { var se = $("splitExp"); se.setAttribute("aria-pressed", String(splitExp)); se.textContent = "";
-      se.appendChild(el("span", "", "Dopisz całą kwotę do wydatków osobistych: " + S.names[payer === null ? 0 : payer])); se.appendChild(el("span", "box", "✓")); }
     splitInfo();
 
   }
@@ -1218,7 +1222,7 @@ function obliczStan(raw, m) {
     var done = function(pr){ pr.then(function(ok){ if (ok) { $("amt").value = ""; $("desc").value = ""; show(addFrom || "start"); } }); };
     if (kind === "shared") { if (!pos) { toast(varList("Wspólne").length ? "Wybierz kategorię." : "Najpierw dodaj kategorię.", true); return; } done(call("dodajWydatek", {data: date, pozycja: pos, kwota: a, opis: desc, miesiac: m}, "Zapisano wydatek")); }
     else if (kind === "mine") { done(call("dodajOsobisty", {osoba: mineWho, data: date, pozycja: minePos, kwota: a, opis: desc, miesiac: m}, "Zapisano wydatek")); }
-    else if (split === "pol") { var pol = Math.round(a * 50) / 100; done(call("dodajRozliczenie", {podzial: "pol", placi: payer, kwota: a, opis: desc, wydatek: splitExp, data: today(), miesiac: month}, "Zapisano – " + S.names[1 - payer] + " odda " + zl(pol, true))); }
+    else if (split === "pol") { var pol = Math.round(a * 50) / 100; done(call("dodajRozliczenie", {podzial: "pol", placi: payer, kwota: a, opis: desc, data: today(), miesiac: month}, "Zapisano – " + S.names[1 - payer] + " odda " + zl(pol, true))); }
     else { done(call("dodajRozliczenie", {kierunek: dir, kwota: a, opis: desc, miesiac: month}, "Zapisano rozliczenie")); }
   };
   document.querySelectorAll(".seg button").forEach(function(b){ b.onclick = function(){ kind = b.dataset.kind; if (kind === "mine" && me !== null) mineWho = me; renderAdd(); }; });
@@ -1231,10 +1235,10 @@ function obliczStan(raw, m) {
     var i = $("splitInfo"); if (!i) return;
     if (kind !== "settle" || split !== "pol" || payer === null) { i.textContent = ""; return; }
     var a = amount(), other = S.names[1 - payer];
-    i.textContent = a ? "Do oddania: " + other + " → " + S.names[payer] + " " + zl(Math.round(a * 50) / 100, true) + " (połowa z " + zl(a, true) + ")" : "Wpisz całą kwotę rachunku – " + other + " odda połowę.";
+    i.textContent = a ? S.names[payer] + " zapłacił(a) " + zl(a, true) + " · do oddania: " + other + " → " + S.names[payer] + " " + zl(Math.round(a * 50) / 100, true) : "Wpisz całą kwotę rachunku – " + other + " odda połowę.";
   }
   $("amt").addEventListener("input", splitInfo);
-  $("splitExp").onclick = function(){ splitExp = !splitExp; store("budzet_podzial_wydatek", splitExp ? "1" : "0"); renderAdd(); };
+
   var addFrom = "start";
   $("addBack").onclick = function(){ show(addFrom || "start"); };
   $("settleAdd").onclick = function(){ openAdd("settle"); };

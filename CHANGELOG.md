@@ -3,6 +3,11 @@
 Numeracja: MAJOR.MINOR.PATCH. Wersje 1.0.x to poprawki działania wersji 1.0.0 (ta sama funkcjonalność).
 Serwer = projekt Apps Script „Budżet” (numer wersji Apps Script w nawiasie).
 
+## 1.6.1
+- „Na pół” działa jak Splitwise bez dodatkowych pytań: płacący zawsze dostaje wydatek osobisty na całą kwotę,
+  druga osoba – połowę do oddania. Usunięto przełącznik „Dopisz całą kwotę…”.
+- Usunięcie rozliczenia „na pół” usuwa też dopisany wydatek płacącego.
+
 ## 1.6.0
 - Rozliczenia „Na pół (50/50)” jak w Splitwise: wybierasz, kto zapłacił, wpisujesz całą kwotę rachunku – druga
   osoba ma do oddania połowę. Podgląd „Do oddania: X → Y …” przy wpisywaniu, na liście „połowa z … zł”.
